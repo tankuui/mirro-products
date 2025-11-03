@@ -3,7 +3,6 @@
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Slider } from "@/components/ui/slider";
 import { Card } from "@/components/ui/card";
 import { Download, Loader2, Image as ImageIcon, CheckCircle, Upload, X } from "lucide-react";
 import { toast } from "sonner";
@@ -31,7 +30,7 @@ interface ProgressInfo {
 export default function Home() {
   const [productUrl, setProductUrl] = useState("");
   const [logoText, setLogoText] = useState("");
-  const [modificationLevel, setModificationLevel] = useState([50]);
+  const [modificationLevel, setModificationLevel] = useState([100]);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<JobResult | null>(null);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
@@ -322,28 +321,6 @@ export default function Home() {
               </p>
             </div>
 
-            <div>
-              <label className="block text-base font-semibold text-gray-800 mb-3">
-                修改程度
-                <span className="ml-3 px-4 py-1 bg-[#07c160] text-white rounded-full text-sm font-bold">
-                  {modificationLevel[0]}%
-                </span>
-              </label>
-              <Slider
-                value={modificationLevel}
-                onValueChange={setModificationLevel}
-                min={10}
-                max={100}
-                step={5}
-                className="w-full py-4"
-                disabled={loading}
-              />
-              <div className="flex justify-between text-sm text-gray-500 mt-2 px-1">
-                <span>轻微修改</span>
-                <span>中度修改</span>
-                <span>完全重构</span>
-              </div>
-            </div>
 
             <Button
               onClick={handleSubmit}
