@@ -297,14 +297,54 @@ function processImageUrl(src: string, baseUrl: string, images: string[]) {
 const OPENROUTER_API_KEY = "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";
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 
+async function downloadImageAsBase64(imageUrl: string, jobId: string): Promise<string | null> {
+  try {
+    console.log(`[${jobId}] 下载图片: ${imageUrl}`);
+
+    const response = await fetch(imageUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        'Referer': imageUrl.split('/').slice(0, 3).join('/'),
+      },
+    });
+
+    if (!response.ok) {
+      console.error(`[${jobId}] 下载图片失败: ${response.status}`);
+      return null;
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+
+    const contentType = response.headers.get('content-type') || 'image/jpeg';
+    const dataUrl = `data:${contentType};base64,${base64}`;
+
+    console.log(`[${jobId}] 图片下载并转换为 base64 成功`);
+    return dataUrl;
+  } catch (error) {
+    console.error(`[${jobId}] 下载图片失败:`, error);
+    return null;
+  }
+}
+
 async function modifyImageWithAI(
   imageUrl: string,
   modificationLevel: number,
   jobId: string
 ): Promise<string | null> {
   try {
-    console.log(`[${jobId}] 步骤 1: 使用 GPT-4o 分析图片...`);
-    console.log(`[${jobId}] 图片URL:`, imageUrl);
+    console.log(`[${jobId}] 步骤 1: 下载并转换图片为 base64...`);
+    const base64Image = await downloadImageAsBase64(imageUrl, jobId);
+
+    if (!base64Image) {
+      console.error(`[${jobId}] 无法下载图片，尝试直接使用 URL`);
+    }
+
+    const imageData = base64Image || imageUrl;
+
+    console.log(`[${jobId}] 步骤 2: 使用 GPT-4o 分析图片...`);
 
     const descriptionResponse = await fetch(OPENROUTER_API_URL, {
       method: "POST",
@@ -326,7 +366,7 @@ async function modifyImageWithAI(
               },
               {
                 type: "image_url",
-                image_url: { url: imageUrl },
+                image_url: { url: imageData },
               },
             ],
           },
@@ -351,7 +391,7 @@ async function modifyImageWithAI(
     }
 
     console.log(`[${jobId}] 图片描述:`, description.substring(0, 150) + '...');
-    console.log(`[${jobId}] 步骤 2: 使用 Gemini 2.5 Flash 生成修改后的图片...`);
+    console.log(`[${jobId}] 步骤 3: 使用 Gemini 2.5 Flash 生成修改后的图片...`);
 
     const modifiedPrompt = generateModificationPrompt(description, modificationLevel);
     console.log(`[${jobId}] 生成提示词:`, modifiedPrompt.substring(0, 150) + '...');
