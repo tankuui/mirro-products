@@ -294,7 +294,7 @@ function processImageUrl(src: string, baseUrl: string, images: string[]) {
   }
 }
 
-const OPENROUTER_API_KEY = "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";
+const OPENROUTER_API_KEY = "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";
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 async function downloadImageAsBase64(imageUrl: string, jobId: string): Promise<string | null> {
