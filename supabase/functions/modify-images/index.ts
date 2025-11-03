@@ -307,6 +307,7 @@ async function downloadImageAsBase64(imageUrl: string, jobId: string): Promise<s
         'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
         'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
         'Referer': imageUrl.split('/').slice(0, 3).join('/'),
+        'Cache-Control': 'no-cache',
       },
     });
 
@@ -316,12 +317,30 @@ async function downloadImageAsBase64(imageUrl: string, jobId: string): Promise<s
     }
 
     const arrayBuffer = await response.arrayBuffer();
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+    const sizeInMB = arrayBuffer.byteLength / (1024 * 1024);
+
+    console.log(`[${jobId}] 图片大小: ${sizeInMB.toFixed(2)} MB`);
+
+    if (sizeInMB > 5) {
+      console.error(`[${jobId}] 图片太大 (${sizeInMB.toFixed(2)} MB)，跳过 base64 转换`);
+      return null;
+    }
+
+    const uint8Array = new Uint8Array(arrayBuffer);
+    const chunkSize = 8192;
+    const chunks: string[] = [];
+
+    for (let i = 0; i < uint8Array.length; i += chunkSize) {
+      const chunk = uint8Array.slice(i, i + chunkSize);
+      chunks.push(String.fromCharCode(...chunk));
+    }
+
+    const base64 = btoa(chunks.join(''));
 
     const contentType = response.headers.get('content-type') || 'image/jpeg';
     const dataUrl = `data:${contentType};base64,${base64}`;
 
-    console.log(`[${jobId}] 图片下载并转换为 base64 成功`);
+    console.log(`[${jobId}] 图片下载并转换为 base64 成功 (${base64.length} 字符)`);
     return dataUrl;
   } catch (error) {
     console.error(`[${jobId}] 下载图片失败:`, error);
@@ -339,10 +358,9 @@ async function modifyImageWithAI(
     const base64Image = await downloadImageAsBase64(imageUrl, jobId);
 
     if (!base64Image) {
-      console.error(`[${jobId}] 无法下载图片，尝试直接使用 URL`);
+      console.error(`[${jobId}] 无法下载或转换图片为 base64，跳过此图片`);
+      return null;
     }
-
-    const imageData = base64Image || imageUrl;
 
     console.log(`[${jobId}] 步骤 2: 使用 GPT-4o 分析图片...`);
 
@@ -366,7 +384,7 @@ async function modifyImageWithAI(
               },
               {
                 type: "image_url",
-                image_url: { url: imageData },
+                image_url: { url: base64Image },
               },
             ],
           },
