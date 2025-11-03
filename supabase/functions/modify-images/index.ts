@@ -369,8 +369,6 @@ async function modifyImageWithAI(
       headers: {
         "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://product-image-modifier.com",
-        "X-Title": "商品主图修改工具",
       },
       body: JSON.stringify({
         model: "openai/gpt-4o",
@@ -419,8 +417,6 @@ async function modifyImageWithAI(
       headers: {
         "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://product-image-modifier.com",
-        "X-Title": "商品主图修改工具",
       },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash-preview-image",
