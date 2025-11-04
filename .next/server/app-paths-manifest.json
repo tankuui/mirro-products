@@ -2,5 +2,7 @@
   "/page": "app/page.js",
   "/images/page": "app/images/page.js",
   "/metrics/page": "app/metrics/page.js",
-  "/errors/page": "app/errors/page.js"
+  "/errors/page": "app/errors/page.js",
+  "/api/images/route": "app/api/images/route.js",
+  "/api/tasks/create/route": "app/api/tasks/create/route.js"
 }
