@@ -297,7 +297,7 @@ export default function ImagesPage() {
     toast.success(`批量下载完成！`);
   };
 
-  const simulateProcessing = async () => {
+  const realProcessing = async () => {
     const pendingImages = images.filter(img => img.status === 'pending' || img.status === 'processing');
 
     if (pendingImages.length === 0) {
@@ -306,35 +306,104 @@ export default function ImagesPage() {
     }
 
     setProcessing(true);
-    toast.info(`正在处理 ${pendingImages.length} 张图片...`);
+    toast.info(`正在同步数据到数据库...`);
 
-    const localImages = JSON.parse(localStorage.getItem('imageRecords') || '[]');
+    try {
+      const localImages = JSON.parse(localStorage.getItem('imageRecords') || '[]');
+      const localTasks = JSON.parse(localStorage.getItem('tasks') || '[]');
 
-    for (let i = 0; i < pendingImages.length; i++) {
-      const img = pendingImages[i];
+      const tasksToSync = new Set<string>();
+      pendingImages.forEach(img => tasksToSync.add(img.task_id));
 
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      for (const taskId of Array.from(tasksToSync)) {
+        const task = localTasks.find((t: any) => t.id === taskId);
+        const taskImages = localImages.filter((img: any) => img.task_id === taskId);
 
-      const updatedImageIndex = localImages.findIndex((item: any) => item.id === img.id);
-      if (updatedImageIndex !== -1) {
-        localImages[updatedImageIndex] = {
-          ...localImages[updatedImageIndex],
-          status: 'completed',
-          modified_url: localImages[updatedImageIndex].original_url,
-          similarity: 85 + Math.random() * 10,
-          difference: 20 + Math.random() * 30,
-        };
+        if (!task || taskImages.length === 0) continue;
+
+        try {
+          const { data: existingTask } = await supabase
+            .from('tasks')
+            .select('id')
+            .eq('id', taskId)
+            .maybeSingle();
+
+          if (!existingTask) {
+            const { error: taskError } = await supabase
+              .from('tasks')
+              .insert({
+                id: task.id,
+                user_id: 'anonymous',
+                product_title: task.product_title || '未命名任务',
+                status: 'pending',
+                total_images: taskImages.length,
+                processed_images: 0,
+                progress: 0,
+                current_step: '等待处理',
+                created_at: task.created_at,
+              });
+
+            if (taskError) {
+              console.error('创建任务失败:', taskError);
+              continue;
+            }
+          }
+
+          for (const img of taskImages) {
+            const { data: existingImage } = await supabase
+              .from('image_records')
+              .select('id')
+              .eq('id', img.id)
+              .maybeSingle();
+
+            if (!existingImage && img.status === 'pending') {
+              await supabase.from('image_records').insert({
+                id: img.id,
+                task_id: img.task_id,
+                original_url: img.original_url,
+                status: 'pending',
+                user_feedback_status: 'pending',
+                regeneration_count: 0,
+                final_approval_status: 'pending',
+                created_at: img.created_at,
+              });
+            }
+          }
+
+          toast.info(`开始 AI 处理任务: ${task.product_title}`);
+
+          const edgeFunctionUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/process-task`;
+          const response = await fetch(edgeFunctionUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+            },
+            body: JSON.stringify({ taskId: task.id }),
+          });
+
+          if (!response.ok) {
+            throw new Error(`处理任务失败: ${response.statusText}`);
+          }
+
+          toast.success(`任务 ${task.product_title} 正在后台处理`);
+        } catch (error) {
+          console.error(`处理任务 ${taskId} 失败:`, error);
+          toast.error(`任务处理失败: ${error instanceof Error ? error.message : '未知错误'}`);
+        }
       }
 
-      localStorage.setItem('imageRecords', JSON.stringify(localImages));
+      toast.success('所有任务已提交，请每10秒刷新查看处理进度');
 
-      if ((i + 1) % 3 === 0 || i === pendingImages.length - 1) {
-        await fetchData();
-      }
+      setTimeout(() => {
+        fetchData();
+      }, 3000);
+    } catch (error) {
+      console.error('处理失败:', error);
+      toast.error(`处理失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    } finally {
+      setProcessing(false);
     }
-
-    setProcessing(false);
-    toast.success(`处理完成！共处理 ${pendingImages.length} 张图片`);
   };
 
   const formatDate = (dateString: string) => {
@@ -569,7 +638,7 @@ export default function ImagesPage() {
             </div>
 <div className="flex items-center gap-3">
               <Button
-                onClick={simulateProcessing}
+                onClick={realProcessing}
                 disabled={processing || images.filter(img => img.status === 'pending' || img.status === 'processing').length === 0}
                 size="lg"
                 className="bg-blue-500 hover:bg-blue-600 text-white"
@@ -582,7 +651,7 @@ export default function ImagesPage() {
                 ) : (
                   <>
                     <CheckCircle className="w-4 h-4 mr-2" />
-                    模拟处理
+                    AI 处理
                   </>
                 )}
               </Button>

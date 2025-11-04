@@ -6,6 +6,12 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Download, Loader2, Image as ImageIcon, CheckCircle, Upload, X } from "lucide-react";
 import { toast } from "sonner";
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 interface ModifiedImage {
   url: string;
@@ -93,19 +99,35 @@ export default function Home() {
       const taskId = `task_${Date.now()}`;
       const imageRecords = [];
 
+      toast.info('正在上传图片到云端...');
+
       for (let i = 0; i < uploadedFiles.length; i++) {
         const file = uploadedFiles[i];
-        const reader = new FileReader();
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${taskId}_${i}.${fileExt}`;
+        const filePath = `${fileName}`;
 
-        const imageData = await new Promise<string>((resolve) => {
-          reader.onload = (e) => resolve(e.target?.result as string);
-          reader.readAsDataURL(file);
-        });
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('product-images')
+          .upload(filePath, file, {
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (uploadError) {
+          console.error('上传失败:', uploadError);
+          toast.error(`图片 ${i + 1} 上传失败: ${uploadError.message}`);
+          continue;
+        }
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('product-images')
+          .getPublicUrl(filePath);
 
         imageRecords.push({
           id: `img_${Date.now()}_${i}`,
           task_id: taskId,
-          original_url: imageData,
+          original_url: publicUrl,
           modified_url: null,
           status: 'pending',
           user_feedback_status: 'pending',
@@ -115,6 +137,12 @@ export default function Home() {
           difference: null,
           created_at: new Date().toISOString(),
         });
+
+        setProgress({ current: i + 1, total: uploadedFiles.length, currentFile: file.name });
+      }
+
+      if (imageRecords.length === 0) {
+        throw new Error('没有成功上传的图片');
       }
 
       const existingImages = JSON.parse(localStorage.getItem('imageRecords') || '[]');
