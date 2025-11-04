@@ -89,15 +89,15 @@ export default function Home() {
     setProgress({ current: 0, total: uploadedFiles.length, currentFile: "" });
 
     try {
-      const taskId = `task_${Date.now()}`;
-      const imageRecords = [];
+      const timestamp = Date.now();
+      const imageUrls: string[] = [];
 
       toast.info('正在上传图片到云端...');
 
       for (let i = 0; i < uploadedFiles.length; i++) {
         const file = uploadedFiles[i];
         const fileExt = file.name.split('.').pop();
-        const fileName = `${taskId}_${i}.${fileExt}`;
+        const fileName = `upload_${timestamp}_${i}.${fileExt}`;
         const filePath = `${fileName}`;
 
         const { data: uploadData, error: uploadError } = await supabase.storage
@@ -117,52 +117,47 @@ export default function Home() {
           .from('product-images')
           .getPublicUrl(filePath);
 
-        imageRecords.push({
-          id: `img_${Date.now()}_${i}`,
-          task_id: taskId,
-          original_url: publicUrl,
-          modified_url: null,
-          status: 'pending',
-          user_feedback_status: 'pending',
-          regeneration_count: 0,
-          final_approval_status: 'pending',
-          similarity: null,
-          difference: null,
-          created_at: new Date().toISOString(),
-        });
+        imageUrls.push(publicUrl);
 
         setProgress({ current: i + 1, total: uploadedFiles.length, currentFile: file.name });
       }
 
-      if (imageRecords.length === 0) {
+      if (imageUrls.length === 0) {
         throw new Error('没有成功上传的图片');
       }
 
-      const existingImages = JSON.parse(localStorage.getItem('imageRecords') || '[]');
-      localStorage.setItem('imageRecords', JSON.stringify([...imageRecords, ...existingImages]));
+      toast.success(`上传完成！正在创建AI处理任务...`);
 
-      const task = {
-        id: taskId,
-        product_title: logoText.trim() || '批量图片修改',
-        status: 'pending',
-        total_images: uploadedFiles.length,
-        processed_images: 0,
-        created_at: new Date().toISOString(),
-      };
+      const response = await fetch('/api/tasks/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          productTitle: logoText.trim() || '批量图片修改',
+          images: imageUrls,
+          description: '',
+          userId: 'anonymous',
+        }),
+      });
 
-      const existingTasks = JSON.parse(localStorage.getItem('tasks') || '[]');
-      localStorage.setItem('tasks', JSON.stringify([task, ...existingTasks]));
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || '创建任务失败');
+      }
+
+      const taskData = await response.json();
 
       setResult({
-        jobId: taskId,
+        jobId: taskData.taskId,
         status: "processing",
       });
 
-      toast.success(`已保存${uploadedFiles.length}张图片！请前往图片管理页面查看`);
+      toast.success(`已创建AI处理任务！正在后台处理 ${imageUrls.length} 张图片`);
 
       setTimeout(() => {
         window.location.href = '/images';
-      }, 1000);
+      }, 2000);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "发生未知错误";
       setResult({
