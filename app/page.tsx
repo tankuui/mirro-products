@@ -247,13 +247,19 @@ export default function Home() {
     toast.info('正在删除图片数据...');
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
+
       const response = await fetch('/api/cleanup', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ deleteAll: true }),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       const data = await response.json();
 
@@ -264,7 +270,11 @@ export default function Home() {
       toast.success(data.message || '删除成功');
     } catch (error) {
       console.error('删除失败:', error);
-      toast.error(error instanceof Error ? error.message : '删除失败');
+      if (error instanceof Error && error.name === 'AbortError') {
+        toast.error('删除操作超时，请稍后重试');
+      } else {
+        toast.error(error instanceof Error ? error.message : '删除失败');
+      }
     } finally {
       setDeleting(false);
     }

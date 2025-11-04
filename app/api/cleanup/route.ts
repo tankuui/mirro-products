@@ -36,6 +36,16 @@ export async function POST(request: NextRequest) {
 
     const imageIds = oldImages.map((img) => img.id);
 
+    await supabase
+      .from('human_reviews')
+      .delete()
+      .in('image_record_id', imageIds);
+
+    await supabase
+      .from('regeneration_attempts')
+      .delete()
+      .in('image_record_id', imageIds);
+
     const { error: deleteError } = await supabase
       .from('image_records')
       .delete()
