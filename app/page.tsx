@@ -34,9 +34,7 @@ interface ProgressInfo {
 }
 
 export default function Home() {
-  const [productUrl, setProductUrl] = useState("");
   const [logoText, setLogoText] = useState("");
-  const [modificationLevel, setModificationLevel] = useState([100]);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<JobResult | null>(null);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
@@ -69,7 +67,6 @@ export default function Home() {
     }
 
     setUploadedFiles(imageFiles);
-    setProductUrl("");
     toast.success(`已选择 ${imageFiles.length} 张图片`);
   };
 
@@ -78,16 +75,12 @@ export default function Home() {
   };
 
   const handleSubmit = async () => {
-    if (uploadedFiles.length === 0 && !productUrl.trim()) {
-      toast.error("请上传图片或输入图片链接");
+    if (uploadedFiles.length === 0) {
+      toast.error("请上传图片");
       return;
     }
 
-    if (uploadedFiles.length > 0) {
-      await handleBatchProcess();
-    } else {
-      await handleSingleUrlProcess();
-    }
+    await handleBatchProcess();
   };
 
   const handleBatchProcess = async () => {
@@ -184,82 +177,6 @@ export default function Home() {
     }
   };
 
-  const handleSingleUrlProcess = async () => {
-    if (!productUrl.trim()) {
-      toast.error("请输入商品链接或图片链接");
-      return;
-    }
-
-    const isImageUrl = /\.(jpg|jpeg|png|webp|gif)(\?|$|#)/i.test(productUrl);
-
-    if (!isImageUrl) {
-      toast.error("请使用图片直链（.jpg/.png/.webp格式）");
-      setResult({
-        jobId: `job_${Date.now()}`,
-        status: "error",
-        error: "请直接使用图片链接。\n\n对于OZON等平台：\n1. 右键点击商品图\n2. 选择'在新标签页中打开图片'\n3. 复制浏览器地址栏中的链接"
-      });
-      return;
-    }
-
-    setLoading(true);
-    setResult({ jobId: "", status: "processing" });
-
-    try {
-      const taskId = `task_${Date.now()}`;
-      const imageId = `img_${Date.now()}`;
-
-      const imageRecord = {
-        id: imageId,
-        task_id: taskId,
-        original_url: productUrl,
-        modified_url: null,
-        status: 'pending',
-        user_feedback_status: 'pending',
-        regeneration_count: 0,
-        final_approval_status: 'pending',
-        similarity: null,
-        difference: null,
-        created_at: new Date().toISOString(),
-      };
-
-      const existingImages = JSON.parse(localStorage.getItem('imageRecords') || '[]');
-      localStorage.setItem('imageRecords', JSON.stringify([imageRecord, ...existingImages]));
-
-      const task = {
-        id: taskId,
-        product_title: logoText.trim() || '单张图片修改',
-        status: 'pending',
-        total_images: 1,
-        processed_images: 0,
-        created_at: new Date().toISOString(),
-      };
-
-      const existingTasks = JSON.parse(localStorage.getItem('tasks') || '[]');
-      localStorage.setItem('tasks', JSON.stringify([task, ...existingTasks]));
-
-      setResult({
-        jobId: taskId,
-        status: "processing",
-      });
-
-      toast.success(`任务已创建！请前往图片管理页面查看处理进度`);
-
-      setTimeout(() => {
-        window.location.href = '/images';
-      }, 1500);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "发生未知错误";
-      setResult({
-        jobId: `job_${Date.now()}`,
-        status: "error",
-        error: errorMessage,
-      });
-      toast.error(errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleDownload = async (url: string, index: number) => {
     try {
@@ -308,11 +225,6 @@ export default function Home() {
             <a href="/images">
               <Button variant="outline" size="sm" className="border-[#07c160] text-[#07c160] hover:bg-green-50">
                 图片管理
-              </Button>
-            </a>
-            <a href="/tasks">
-              <Button variant="outline" size="sm">
-                任务列表
               </Button>
             </a>
             <a href="/errors">
@@ -395,32 +307,6 @@ export default function Home() {
                   </div>
                 )}
               </div>
-
-              <div className="flex items-center gap-4 my-6">
-                <div className="flex-1 h-px bg-gray-300"></div>
-                <span className="text-sm text-gray-500 font-medium">或</span>
-                <div className="flex-1 h-px bg-gray-300"></div>
-              </div>
-
-              <label className="block text-base font-semibold text-gray-800 mb-3">
-                输入图片链接（单张处理）
-              </label>
-              <Input
-                type="url"
-                placeholder="直接粘贴图片地址（.jpg/.png/.webp）"
-                value={productUrl}
-                onChange={(e) => {
-                  setProductUrl(e.target.value);
-                  if (e.target.value && uploadedFiles.length > 0) {
-                    setUploadedFiles([]);
-                  }
-                }}
-                className="w-full h-14 text-base rounded-xl border-2 border-gray-200 focus:border-[#07c160] transition-colors"
-                disabled={loading || uploadedFiles.length > 0}
-              />
-              <p className="text-xs text-gray-500 mt-2">
-                提示：如果网页抓取失败，可直接右键商品图片"复制图片地址"后粘贴
-              </p>
             </div>
 
             <div>
@@ -452,7 +338,7 @@ export default function Home() {
 
             <Button
               onClick={handleSubmit}
-              disabled={loading || (uploadedFiles.length === 0 && !productUrl.trim())}
+              disabled={loading || uploadedFiles.length === 0}
               className="w-full bg-gradient-to-r from-[#07c160] to-[#06ad56] hover:from-[#06ad56] hover:to-[#059c4c] text-white h-16 text-lg font-semibold rounded-xl shadow-lg shadow-green-500/30 transition-all duration-200 hover:shadow-xl hover:scale-[1.02]"
             >
               {loading ? (
@@ -468,9 +354,7 @@ export default function Home() {
               ) : (
                 <>
                   <ImageIcon className="mr-3 h-6 w-6" />
-                  {uploadedFiles.length > 0
-                    ? `批量处理 ${uploadedFiles.length} 张图片`
-                    : "开始 AI 修改"}
+                  批量处理 {uploadedFiles.length > 0 ? `${uploadedFiles.length} 张图片` : '图片'}
                 </>
               )}
             </Button>

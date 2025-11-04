@@ -384,13 +384,6 @@ export default function ErrorsPage() {
                         <p className="text-sm text-gray-600">{review.detailed_feedback}</p>
                       </div>
                     )}
-                    <div className="mt-3 flex gap-2">
-                      <Link href={`/tasks/${review.task_id}`}>
-                        <Button size="sm" variant="outline">
-                          查看任务
-                        </Button>
-                      </Link>
-                    </div>
                   </div>
                 ))}
               </div>
