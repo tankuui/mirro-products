@@ -5,6 +5,8 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -24,6 +26,7 @@ import {
   ArrowLeft,
   Image as ImageIcon,
   RotateCw,
+  Edit3,
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
@@ -66,6 +69,9 @@ export default function ImagesPage() {
   const [feedbackText, setFeedbackText] = useState("");
   const [regenerating, setRegenerating] = useState<string | null>(null);
   const [selectedImages, setSelectedImages] = useState<Set<string>>(new Set());
+  const [customPromptDialog, setCustomPromptDialog] = useState<{imageId: string; taskId: string} | null>(null);
+  const [customPrompt, setCustomPrompt] = useState("");
+  const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetchData();
@@ -191,7 +197,12 @@ export default function ImagesPage() {
     }
   };
 
-  const handleRegenerate = async (imageId: string, taskId: string) => {
+  const handleRegenerate = async (imageId: string, taskId: string, useCustomPrompt = false) => {
+    if (useCustomPrompt) {
+      setCustomPromptDialog({ imageId, taskId });
+      return;
+    }
+
     try {
       setRegenerating(imageId);
       const response = await fetch(`/api/regenerate`, {
@@ -203,6 +214,38 @@ export default function ImagesPage() {
       if (!response.ok) throw new Error('重新生成失败');
 
       toast.success('已开始重新生成，请稍候...');
+      setTimeout(() => fetchData(), 2000);
+    } catch (error) {
+      console.error('重新生成失败:', error);
+      toast.error('重新生成失败');
+    } finally {
+      setRegenerating(null);
+    }
+  };
+
+  const handleCustomPromptSubmit = async () => {
+    if (!customPromptDialog || !customPrompt.trim()) {
+      toast.error('请输入修改要求');
+      return;
+    }
+
+    try {
+      setRegenerating(customPromptDialog.imageId);
+      const response = await fetch(`/api/regenerate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageRecordId: customPromptDialog.imageId,
+          taskId: customPromptDialog.taskId,
+          customPrompt: customPrompt.trim()
+        })
+      });
+
+      if (!response.ok) throw new Error('重新生成失败');
+
+      toast.success('已开始重新生成，请稍候...');
+      setCustomPromptDialog(null);
+      setCustomPrompt('');
       setTimeout(() => fetchData(), 2000);
     } catch (error) {
       console.error('重新生成失败:', error);
@@ -438,20 +481,32 @@ export default function ImagesPage() {
                     </>
                   )}
                   {image.user_feedback_status === 'fail' && (
-                    <Button
-                      onClick={() => handleRegenerate(image.id, image.task_id)}
-                      disabled={regenerating === image.id}
-                      size="sm"
-                      variant="outline"
-                      className="text-xs h-8 border-orange-500 text-orange-600"
-                    >
-                      {regenerating === image.id ? (
-                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                      ) : (
-                        <RefreshCw className="w-3 h-3 mr-1" />
-                      )}
-                      精修
-                    </Button>
+                    <>
+                      <Button
+                        onClick={() => handleRegenerate(image.id, image.task_id)}
+                        disabled={regenerating === image.id}
+                        size="sm"
+                        variant="outline"
+                        className="text-xs h-8 border-orange-500 text-orange-600"
+                      >
+                        {regenerating === image.id ? (
+                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                        ) : (
+                          <RefreshCw className="w-3 h-3 mr-1" />
+                        )}
+                        自动精修
+                      </Button>
+                      <Button
+                        onClick={() => handleRegenerate(image.id, image.task_id, true)}
+                        disabled={regenerating === image.id}
+                        size="sm"
+                        variant="outline"
+                        className="text-xs h-8 border-blue-500 text-blue-600"
+                      >
+                        <Edit3 className="w-3 h-3 mr-1" />
+                        自定义修改
+                      </Button>
+                    </>
                   )}
                 </>
               )}
@@ -578,49 +633,104 @@ export default function ImagesPage() {
               </TableBody>
             </Table>
           ) : (
-            <div className="divide-y">
-              {taskGroups.map((group) => (
-                <div key={group.task_id} className="p-6">
-                  <div className="mb-4 flex items-center justify-between">
-                    <div>
-                      <h3 className="text-lg font-bold text-gray-800">{group.task_title}</h3>
-                      <p className="text-sm text-gray-500">{formatDate(group.created_at)} · {group.images.length} 张图片</p>
-                    </div>
-                    <Button
-                      onClick={() => toggleTaskSelection(group.task_id)}
-                      variant="outline"
-                      size="sm"
-                      className="text-[#07c160] border-[#07c160] hover:bg-green-50"
+            <div className="space-y-4">
+              {taskGroups.map((group) => {
+                const isExpanded = expandedTasks.has(group.task_id);
+                const completedCount = group.images.filter(img => img.status === 'completed').length;
+                const failedCount = group.images.filter(img => img.status === 'failed').length;
+
+                return (
+                  <Card key={group.task_id} className="overflow-hidden">
+                    <div
+                      className="p-4 cursor-pointer hover:bg-gray-50 transition-colors"
+                      onClick={() => {
+                        const newExpanded = new Set(expandedTasks);
+                        if (isExpanded) {
+                          newExpanded.delete(group.task_id);
+                        } else {
+                          newExpanded.add(group.task_id);
+                        }
+                        setExpandedTasks(newExpanded);
+                      }}
                     >
-                      {group.images.every(img => selectedImages.has(img.id)) ? '取消全选' : '全选批次'}
-                    </Button>
-                  </div>
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-gray-50 hover:bg-gray-50">
-                        <TableHead className="w-[80px]">
-                          <input
-                            type="checkbox"
-                            className="w-4 h-4 rounded cursor-pointer"
-                            checked={group.images.length > 0 && group.images.every(img => selectedImages.has(img.id))}
-                            onChange={() => toggleTaskSelection(group.task_id)}
-                          />
-                        </TableHead>
-                        <TableHead>ID</TableHead>
-                        <TableHead>原图</TableHead>
-                        <TableHead>修改后</TableHead>
-                        <TableHead>状态</TableHead>
-                        <TableHead>差异度</TableHead>
-                        <TableHead>创建时间</TableHead>
-                        <TableHead>操作</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {group.images.map(renderImageRow)}
-                    </TableBody>
-                  </Table>
-                </div>
-              ))}
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h3 className="text-lg font-bold text-gray-800 mb-1">{group.task_title}</h3>
+                          <p className="text-sm text-gray-500 mb-3">
+                            {formatDate(group.created_at)} · {group.images.length} 张图片
+                            {completedCount > 0 && ` · ${completedCount} 完成`}
+                            {failedCount > 0 && ` · ${failedCount} 失败`}
+                          </p>
+
+                          <div className="grid grid-cols-8 gap-2">
+                            {group.images.slice(0, 8).map((img) => (
+                              <div key={img.id} className="relative aspect-square rounded-lg overflow-hidden border-2 border-gray-200">
+                                <img
+                                  src={img.modified_url || img.original_url}
+                                  alt="缩略图"
+                                  className="w-full h-full object-cover"
+                                />
+                                {img.status === 'completed' && (
+                                  <div className="absolute top-1 right-1 bg-green-500 rounded-full p-0.5">
+                                    <CheckCircle className="w-3 h-3 text-white" />
+                                  </div>
+                                )}
+                                {img.status === 'failed' && (
+                                  <div className="absolute top-1 right-1 bg-red-500 rounded-full p-0.5">
+                                    <XCircle className="w-3 h-3 text-white" />
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                            {group.images.length > 8 && (
+                              <div className="aspect-square rounded-lg bg-gray-100 flex items-center justify-center text-gray-500 text-xs font-semibold">
+                                +{group.images.length - 8}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="ml-4"
+                        >
+                          {isExpanded ? '收起' : '展开详情'}
+                        </Button>
+                      </div>
+                    </div>
+
+                    {isExpanded && (
+                      <div className="border-t">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="bg-gray-50 hover:bg-gray-50">
+                              <TableHead className="w-[80px]">
+                                <input
+                                  type="checkbox"
+                                  className="w-4 h-4 rounded cursor-pointer"
+                                  checked={group.images.length > 0 && group.images.every(img => selectedImages.has(img.id))}
+                                  onChange={() => toggleTaskSelection(group.task_id)}
+                                />
+                              </TableHead>
+                              <TableHead>ID</TableHead>
+                              <TableHead>原图</TableHead>
+                              <TableHead>修改后</TableHead>
+                              <TableHead>状态</TableHead>
+                              <TableHead>差异度</TableHead>
+                              <TableHead>创建时间</TableHead>
+                              <TableHead>操作</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {group.images.map(renderImageRow)}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
+                  </Card>
+                );
+              })}
             </div>
           )}
         </Card>
@@ -631,6 +741,52 @@ export default function ImagesPage() {
           </p>
         </div>
       </div>
+
+      <Dialog open={!!customPromptDialog} onOpenChange={(open) => !open && setCustomPromptDialog(null)}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>自定义修改要求</DialogTitle>
+            <DialogDescription>
+              请描述您希望如何修改这张图片，AI 将根据您的要求重新生成图片。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Textarea
+              placeholder="例如：请保持商品形状不变，只修改背景颜色为白色..."
+              value={customPrompt}
+              onChange={(e) => setCustomPrompt(e.target.value)}
+              className="min-h-[120px]"
+              disabled={!!regenerating}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCustomPromptDialog(null);
+                setCustomPrompt('');
+              }}
+              disabled={!!regenerating}
+            >
+              取消
+            </Button>
+            <Button
+              onClick={handleCustomPromptSubmit}
+              disabled={!!regenerating || !customPrompt.trim()}
+              className="bg-[#07c160] hover:bg-[#06ad56]"
+            >
+              {regenerating ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  生成中...
+                </>
+              ) : (
+                '开始生成'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

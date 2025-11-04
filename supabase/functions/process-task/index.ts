@@ -123,38 +123,46 @@ Deno.serve(async (req: Request) => {
     let processedCount = 0;
 
     for (const record of imageRecords) {
-      try {
-        await supabase
-          .from('image_records')
-          .update({ status: 'processing' })
-          .eq('id', record.id);
+      let retryCount = 0;
+      const maxRetries = 1;
+      let lastError: Error | null = null;
 
-        const startTime = Date.now();
+      while (retryCount <= maxRetries) {
+        try {
+          await supabase
+            .from('image_records')
+            .update({
+              status: 'processing',
+              regeneration_count: retryCount
+            })
+            .eq('id', record.id);
 
-        const imageResponse = await fetch(record.original_url);
-        if (!imageResponse.ok) {
-          throw new Error(`Failed to download image: ${imageResponse.status}`);
-        }
+          const startTime = Date.now();
 
-        const imageBlob = await imageResponse.blob();
-        const arrayBuffer = await imageBlob.arrayBuffer();
-        const base64Image = `data:${imageBlob.type};base64,${btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)))}`;
+          const imageResponse = await fetch(record.original_url);
+          if (!imageResponse.ok) {
+            throw new Error(`Failed to download image: ${imageResponse.status}`);
+          }
 
-        const descriptionResponse = await fetch(OPENROUTER_API_URL, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: 'openai/gpt-4o',
+          const imageBlob = await imageResponse.blob();
+          const arrayBuffer = await imageBlob.arrayBuffer();
+          const base64Image = `data:${imageBlob.type};base64,${btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)))}`;
+
+          const descriptionResponse = await fetch(OPENROUTER_API_URL, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: 'openai/gpt-4o',
             messages: [
               {
                 role: 'user',
                 content: [
                   {
                     type: 'text',
-                    text: 'Analyze this product image in extreme detail. Describe the product, layout, all text (in any language), and background.',
+                    text: 'Analyze this product image briefly. Describe in one sentence: what product is shown and what are its main characteristics.',
                   },
                   {
                     type: 'image_url',
@@ -163,7 +171,7 @@ Deno.serve(async (req: Request) => {
                 ],
               },
             ],
-            max_tokens: 1200,
+            max_tokens: 150,
           }),
         });
 
@@ -172,13 +180,9 @@ Deno.serve(async (req: Request) => {
         }
 
         const descriptionData = await descriptionResponse.json();
-        const description = descriptionData.choices?.[0]?.message?.content;
+        const description = descriptionData.choices?.[0]?.message?.content || 'A product image';
 
-        if (!description) {
-          throw new Error('Failed to get image description');
-        }
-
-        const modificationPrompt = `Modify this product image: change the background while keeping the product identical. Modification level: ${settings.modification_level}%. ${settings.logo_text ? `Add logo text: "${settings.logo_text}"` : 'Remove brand logos'}. Reference: ${description}`;
+        const modifyPrompt = `Modify this product image: remove any existing logos or brand text from the product and background. Keep the product itself unchanged (same shape, color, size, texture, details). Only modify the background to be clean and simple. Do not add new logos yet. Maintain the original quality and details of the product. The product shown is: ${description}`;
 
         const imageGenResponse = await fetch(OPENROUTER_API_URL, {
           method: 'POST',
@@ -194,7 +198,7 @@ Deno.serve(async (req: Request) => {
                 content: [
                   {
                     type: 'text',
-                    text: modificationPrompt,
+                    text: modifyPrompt,
                   },
                   {
                     type: 'image_url',
@@ -235,49 +239,76 @@ Deno.serve(async (req: Request) => {
           throw new Error('Failed to extract generated image URL');
         }
 
-        const processingTime = Date.now() - startTime;
+          const processingTime = Date.now() - startTime;
 
-        await supabase
-          .from('image_records')
-          .update({
-            status: 'completed',
-            modified_url: generatedImageUrl,
-            similarity: 70 + Math.random() * 20,
-            difference: 30 + Math.random() * 20,
-            processing_time: processingTime,
-            completed_at: new Date().toISOString(),
-          })
-          .eq('id', record.id);
+          await supabase
+            .from('image_records')
+            .update({
+              status: 'completed',
+              modified_url: generatedImageUrl,
+              similarity: 70 + Math.random() * 20,
+              difference: 30 + Math.random() * 20,
+              processing_time: processingTime,
+              completed_at: new Date().toISOString(),
+              regeneration_count: retryCount,
+            })
+            .eq('id', record.id);
 
-        processedCount++;
+          processedCount++;
 
-        const progress = Math.floor(20 + (processedCount / totalImages) * 60);
-        await supabase
-          .from('tasks')
-          .update({
-            processed_images: processedCount,
-            progress,
-            current_step: `正在处理第 ${processedCount}/${totalImages} 张图片`,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', taskId);
-      } catch (error) {
-        console.error(`Failed to process image ${record.id}:`, error);
+          const progress = Math.floor(20 + (processedCount / totalImages) * 60);
+          await supabase
+            .from('tasks')
+            .update({
+              processed_images: processedCount,
+              progress,
+              current_step: `正在处理第 ${processedCount}/${totalImages} 张图片`,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', taskId);
 
-        await supabase
-          .from('image_records')
-          .update({
-            status: 'failed',
-            error_message: error instanceof Error ? error.message : 'Unknown error',
-          })
-          .eq('id', record.id);
+          if (retryCount > 0) {
+            await supabase.from('task_logs').insert({
+              task_id: taskId,
+              log_type: 'info',
+              message: `图片 ${record.id} 在第 ${retryCount + 1} 次尝试后成功处理`,
+            });
+          }
 
-        await supabase.from('task_logs').insert({
-          task_id: taskId,
-          log_type: 'error',
-          message: `图片处理失败: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          metadata: { image_id: record.id },
-        });
+          break;
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error('Unknown error');
+          console.error(`Failed to process image ${record.id} (attempt ${retryCount + 1}/${maxRetries + 1}):`, lastError);
+
+          retryCount++;
+
+          if (retryCount <= maxRetries) {
+            await supabase.from('task_logs').insert({
+              task_id: taskId,
+              log_type: 'warning',
+              message: `图片 ${record.id} 处理失败，正在进行第 ${retryCount + 1} 次重试...`,
+              metadata: { image_id: record.id, attempt: retryCount },
+            });
+
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          } else {
+            await supabase
+              .from('image_records')
+              .update({
+                status: 'failed',
+                error_message: lastError.message,
+                regeneration_count: retryCount,
+              })
+              .eq('id', record.id);
+
+            await supabase.from('task_logs').insert({
+              task_id: taskId,
+              log_type: 'error',
+              message: `图片 ${record.id} 在 ${retryCount} 次尝试后仍然失败: ${lastError.message}`,
+              metadata: { image_id: record.id },
+            });
+          }
+        }
       }
     }
 
@@ -347,8 +378,8 @@ Deno.serve(async (req: Request) => {
       .from('tasks')
       .update({
         status: 'completed',
-        current_step: '处理完成',
         progress: 100,
+        current_step: '处理完成',
         completed_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
@@ -358,26 +389,23 @@ Deno.serve(async (req: Request) => {
       task_id: taskId,
       log_type: 'info',
       message: '任务处理完成',
-      metadata: { processed_images: processedCount, total_images: totalImages },
     });
 
     return new Response(
-      JSON.stringify({ success: true, taskId, processedImages: processedCount }),
+      JSON.stringify({ success: true, processedImages: processedCount }),
       {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     );
   } catch (error) {
-    console.error('Edge function error:', error);
+    console.error('Error processing task:', error);
     return new Response(
-      JSON.stringify({
-        error: error instanceof Error ? error.message : 'Unknown error',
-      }),
+      JSON.stringify({ error: 'Internal server error' }),
       {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
+        }
     );
   }
 });

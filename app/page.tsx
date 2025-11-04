@@ -39,6 +39,8 @@ export default function Home() {
   const [result, setResult] = useState<JobResult | null>(null);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [progress, setProgress] = useState<ProgressInfo | null>(null);
+  const [cancelRequested, setCancelRequested] = useState(false);
+  const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -83,8 +85,31 @@ export default function Home() {
     await handleBatchProcess();
   };
 
+  const handleCancel = async () => {
+    setCancelRequested(true);
+    toast.info('正在取消任务...');
+
+    if (currentTaskId) {
+      try {
+        await supabase
+          .from('tasks')
+          .update({ status: 'cancelled' })
+          .eq('id', currentTaskId);
+      } catch (error) {
+        console.error('取消任务失败:', error);
+      }
+    }
+
+    setLoading(false);
+    setProgress(null);
+    setCancelRequested(false);
+    setCurrentTaskId(null);
+    toast.success('任务已取消');
+  };
+
   const handleBatchProcess = async () => {
     setLoading(true);
+    setCancelRequested(false);
     setResult({ jobId: "", status: "processing" });
     setProgress({ current: 0, total: uploadedFiles.length, currentFile: "" });
 
@@ -95,6 +120,11 @@ export default function Home() {
       toast.info('正在上传图片到云端...');
 
       for (let i = 0; i < uploadedFiles.length; i++) {
+        if (cancelRequested) {
+          toast.info('上传已取消');
+          return;
+        }
+
         const file = uploadedFiles[i];
         const fileExt = file.name.split('.').pop();
         const fileName = `upload_${timestamp}_${i}.${fileExt}`;
@@ -122,6 +152,11 @@ export default function Home() {
         setProgress({ current: i + 1, total: uploadedFiles.length, currentFile: file.name });
       }
 
+      if (cancelRequested) {
+        toast.info('任务已取消');
+        return;
+      }
+
       if (imageUrls.length === 0) {
         throw new Error('没有成功上传的图片');
       }
@@ -147,6 +182,7 @@ export default function Home() {
       }
 
       const taskData = await response.json();
+      setCurrentTaskId(taskData.taskId);
 
       setResult({
         jobId: taskData.taskId,
@@ -169,6 +205,7 @@ export default function Home() {
     } finally {
       setLoading(false);
       setProgress(null);
+      setCancelRequested(false);
     }
   };
 
@@ -331,28 +368,41 @@ export default function Home() {
             </div>
 
 
-            <Button
-              onClick={handleSubmit}
-              disabled={loading || uploadedFiles.length === 0}
-              className="w-full bg-gradient-to-r from-[#07c160] to-[#06ad56] hover:from-[#06ad56] hover:to-[#059c4c] text-white h-16 text-lg font-semibold rounded-xl shadow-lg shadow-green-500/30 transition-all duration-200 hover:shadow-xl hover:scale-[1.02]"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="mr-3 h-6 w-6 animate-spin" />
-                  AI 处理中...
-                  {progress && (
-                    <span className="ml-2 text-sm">
-                      ({progress.current}/{progress.total})
-                    </span>
-                  )}
-                </>
-              ) : (
-                <>
-                  <ImageIcon className="mr-3 h-6 w-6" />
-                  批量处理 {uploadedFiles.length > 0 ? `${uploadedFiles.length} 张图片` : '图片'}
-                </>
+            <div className="space-y-3">
+              <Button
+                onClick={handleSubmit}
+                disabled={loading || uploadedFiles.length === 0}
+                className="w-full bg-gradient-to-r from-[#07c160] to-[#06ad56] hover:from-[#06ad56] hover:to-[#059c4c] text-white h-16 text-lg font-semibold rounded-xl shadow-lg shadow-green-500/30 transition-all duration-200 hover:shadow-xl hover:scale-[1.02]"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-3 h-6 w-6 animate-spin" />
+                    AI 处理中...
+                    {progress && (
+                      <span className="ml-2 text-sm">
+                        ({progress.current}/{progress.total})
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <ImageIcon className="mr-3 h-6 w-6" />
+                    批量处理 {uploadedFiles.length > 0 ? `${uploadedFiles.length} 张图片` : '图片'}
+                  </>
+                )}
+              </Button>
+
+              {loading && (
+                <Button
+                  onClick={handleCancel}
+                  variant="outline"
+                  className="w-full border-2 border-red-500 text-red-600 hover:bg-red-50 h-12 text-base font-semibold rounded-xl"
+                >
+                  <X className="mr-2 h-5 w-5" />
+                  取消任务
+                </Button>
               )}
-            </Button>
+            </div>
           </div>
         </Card>
 

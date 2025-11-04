@@ -9,7 +9,7 @@ const supabase = createClient(
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { imageRecordId, taskId } = body;
+    const { imageRecordId, taskId, customPrompt } = body;
 
     if (!imageRecordId || !taskId) {
       return NextResponse.json(
@@ -67,11 +67,13 @@ export async function POST(request: NextRequest) {
         image_record_id: imageRecordId,
         human_review_id: review?.id || null,
         attempt_number: attemptNumber,
-        strategy_used: strategy,
+        strategy_used: customPrompt ? 'custom' : strategy,
+        prompt_template: customPrompt || null,
         model_used: model,
         parameters: {
           strength_adjustment: strengthAdjustment,
-          error_types: errorTypes
+          error_types: errorTypes,
+          custom_prompt: customPrompt || null
         },
         created_at: new Date().toISOString()
       });
@@ -101,9 +103,10 @@ export async function POST(request: NextRequest) {
           body: JSON.stringify({
             imageUrls: [imageRecord.original_url],
             modificationLevel: 100 + (strengthAdjustment * 100),
-            strategy,
+            strategy: customPrompt ? 'custom' : strategy,
             model,
-            regeneration: true
+            regeneration: true,
+            customPrompt: customPrompt || null
           })
         });
 
