@@ -46,6 +46,9 @@ export async function POST(request: NextRequest) {
       task_id: task.id,
       original_url: url,
       status: "pending",
+      user_feedback_status: "pending",
+      regeneration_count: 0,
+      final_approval_status: "pending",
     }));
 
     const { error: imagesError } = await supabase

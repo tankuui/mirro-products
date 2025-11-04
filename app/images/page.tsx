@@ -337,7 +337,7 @@ export default function ImagesPage() {
                 </div>
               ) : (
                 <>
-                  {image.user_feedback_status === 'pending' && (
+                  {(image.user_feedback_status === 'pending' || !image.user_feedback_status) && (
                     <>
                       <Button
                         onClick={() => handleFeedbackSubmit(image.id, 'pass')}
