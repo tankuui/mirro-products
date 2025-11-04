@@ -23,6 +23,7 @@ import {
   ThumbsDown,
   ArrowLeft,
   Image as ImageIcon,
+  RotateCw,
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
@@ -67,8 +68,6 @@ export default function ImagesPage() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 5000);
-    return () => clearInterval(interval);
   }, []);
 
   const fetchData = async () => {
@@ -414,14 +413,38 @@ export default function ImagesPage() {
         </div>
 
         <div className="mb-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="inline-flex items-center justify-center w-12 h-12 bg-gradient-to-br from-[#07c160] to-[#06ad56] rounded-2xl">
-              <ImageIcon className="w-6 h-6 text-white" />
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="inline-flex items-center justify-center w-12 h-12 bg-gradient-to-br from-[#07c160] to-[#06ad56] rounded-2xl">
+                <ImageIcon className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-4xl font-bold text-gray-800">图片管理</h1>
+                <p className="text-gray-600">查看所有处理过的图片，支持反馈和重新生成</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-4xl font-bold text-gray-800">图片管理</h1>
-              <p className="text-gray-600">查看所有处理过的图片，支持反馈和重新生成</p>
-            </div>
+            <Button
+              onClick={() => {
+                setLoading(true);
+                fetchData();
+              }}
+              variant="outline"
+              size="lg"
+              disabled={loading}
+              className="border-[#07c160] text-[#07c160] hover:bg-green-50"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  刷新中...
+                </>
+              ) : (
+                <>
+                  <RotateCw className="w-4 h-4 mr-2" />
+                  刷新
+                </>
+              )}
+            </Button>
           </div>
 
           <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as any)} className="w-[400px]">
@@ -488,7 +511,7 @@ export default function ImagesPage() {
 
         <div className="mt-6 text-center">
           <p className="text-sm text-gray-500">
-            共 {images.length} 张图片 · 每5秒自动刷新
+            共 {images.length} 张图片 · 点击右上角"刷新"按钮查看最新状态
           </p>
         </div>
       </div>
