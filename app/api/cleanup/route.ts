@@ -8,15 +8,19 @@ const supabase = createClient(
 
 export async function POST(request: NextRequest) {
   try {
-    const { days = 30 } = await request.json();
+    const { days, deleteAll = false } = await request.json();
 
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - days);
-
-    const { data: oldImages, error: fetchError } = await supabase
+    let query = supabase
       .from('image_records')
-      .select('id, storage_path')
-      .lt('created_at', cutoffDate.toISOString());
+      .select('id, storage_path');
+
+    if (!deleteAll && days) {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - days);
+      query = query.lt('created_at', cutoffDate.toISOString());
+    }
+
+    const { data: oldImages, error: fetchError } = await query;
 
     if (fetchError) {
       throw fetchError;
@@ -25,7 +29,7 @@ export async function POST(request: NextRequest) {
     if (!oldImages || oldImages.length === 0) {
       return NextResponse.json({
         success: true,
-        message: `没有找到 ${days} 天前的图片`,
+        message: deleteAll ? '没有找到图片数据' : `没有找到 ${days} 天前的图片`,
         deleted: 0,
       });
     }
@@ -55,9 +59,11 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `成功删除 ${imageIds.length} 张旧图片`,
+      message: deleteAll
+        ? `成功删除所有 ${imageIds.length} 张图片`
+        : `成功删除 ${imageIds.length} 张旧图片`,
       deleted: imageIds.length,
-      days,
+      days: deleteAll ? undefined : days,
     });
   } catch (error) {
     console.error('清理数据失败:', error);

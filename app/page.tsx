@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { Download, Loader2, Image as ImageIcon, CheckCircle, Upload, X } from "lucide-react";
+import { Download, Loader2, Image as ImageIcon, CheckCircle, Upload, X, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 
@@ -36,6 +36,7 @@ export default function Home() {
   const [progress, setProgress] = useState<ProgressInfo | null>(null);
   const [cancelRequested, setCancelRequested] = useState(false);
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -235,6 +236,38 @@ export default function Home() {
     }
 
     toast.success("批量下载完成");
+  };
+
+  const handleDeleteAllImages = async () => {
+    if (!confirm('确认要删除所有图片数据吗？此操作不可恢复！\n\n注意：只会删除图片数据，不会删除错误反馈等其他信息。')) {
+      return;
+    }
+
+    setDeleting(true);
+    toast.info('正在删除图片数据...');
+
+    try {
+      const response = await fetch('/api/cleanup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ deleteAll: true }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.details || data.error || '删除失败');
+      }
+
+      toast.success(data.message || '删除成功');
+    } catch (error) {
+      console.error('删除失败:', error);
+      toast.error(error instanceof Error ? error.message : '删除失败');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
@@ -556,6 +589,27 @@ export default function Home() {
           <p className="text-xs text-gray-400">
             AI 自动识别并修改商品主图，确保至少 30% 的视觉差异
           </p>
+        </div>
+
+        <div className="mt-8 flex justify-center">
+          <Button
+            onClick={handleDeleteAllImages}
+            disabled={deleting}
+            variant="outline"
+            className="border-2 border-red-500 text-red-600 hover:bg-red-50 hover:border-red-600"
+          >
+            {deleting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                删除中...
+              </>
+            ) : (
+              <>
+                <Trash2 className="mr-2 h-4 w-4" />
+                清空所有图片数据
+              </>
+            )}
+          </Button>
         </div>
       </div>
     </div>
