@@ -966,6 +966,9 @@ video {
 .h-40 {
   height: 10rem;
 }
+.h-64 {
+  height: 16rem;
+}
 .max-h-60 {
   max-height: 15rem;
 }
@@ -1269,6 +1272,9 @@ video {
 }
 .gap-6 {
   gap: 1.5rem;
+}
+.gap-8 {
+  gap: 2rem;
 }
 .space-x-1 > :not([hidden]) ~ :not([hidden]) {
   --tw-space-x-reverse: 0;

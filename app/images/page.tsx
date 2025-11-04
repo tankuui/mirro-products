@@ -446,7 +446,7 @@ export default function ImagesPage() {
           <img
             src={image.original_url}
             alt="原图"
-            className="w-40 h-40 object-contain border-2 rounded-lg shadow-sm hover:scale-105 transition-transform cursor-pointer"
+            className="w-64 h-64 object-contain border-2 rounded-xl shadow-md hover:scale-105 transition-transform cursor-pointer"
             onClick={() => window.open(image.original_url, '_blank')}
           />
         </div>
@@ -457,16 +457,16 @@ export default function ImagesPage() {
             <img
               src={image.modified_url}
               alt="修改后"
-              className="w-40 h-40 object-contain border-2 border-[#07c160] rounded-lg shadow-sm hover:scale-105 transition-transform cursor-pointer"
+              className="w-64 h-64 object-contain border-2 border-[#07c160] rounded-xl shadow-md hover:scale-105 transition-transform cursor-pointer"
               onClick={() => window.open(image.modified_url, '_blank')}
             />
           ) : image.status === "processing" ? (
-            <div className="w-40 h-40 flex items-center justify-center border-2 rounded-lg bg-gray-50">
-              <Loader2 className="w-8 h-8 animate-spin text-[#07c160]" />
+            <div className="w-64 h-64 flex items-center justify-center border-2 rounded-xl bg-gray-50">
+              <Loader2 className="w-10 h-10 animate-spin text-[#07c160]" />
             </div>
           ) : (
-            <div className="w-40 h-40 flex items-center justify-center border-2 rounded-lg bg-gray-50">
-              <XCircle className="w-8 h-8 text-red-500" />
+            <div className="w-64 h-64 flex items-center justify-center border-2 rounded-xl bg-gray-50">
+              <XCircle className="w-10 h-10 text-red-500" />
             </div>
           )}
         </div>
