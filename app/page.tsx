@@ -390,54 +390,57 @@ export default function Home() {
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="space-y-8">
                   {result.images.map((image, index) => (
                     <div
                       key={index}
-                      className="border-2 border-gray-200 rounded-2xl overflow-hidden bg-white hover:shadow-lg transition-shadow"
+                      className="border-2 border-gray-200 rounded-2xl overflow-hidden bg-white shadow-lg"
                     >
-                      <div className="grid grid-cols-2 gap-2 p-4 bg-gray-50">
-                        <div className="space-y-2">
-                          <p className="text-xs font-semibold text-gray-600 text-center">原图</p>
-                          <div className="aspect-square relative bg-white rounded-lg overflow-hidden border-2 border-gray-300">
-                            <img
-                              src={image.originalUrl}
-                              alt={`原图 ${index + 1}`}
-                              className="w-full h-full object-contain"
-                              loading="lazy"
-                            />
+                      <div className="p-6 bg-gray-50">
+                        <h3 className="text-lg font-bold text-gray-800 mb-4">图片 {index + 1}</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div className="space-y-3">
+                            <p className="text-sm font-semibold text-gray-600 text-center">原图</p>
+                            <div className="relative bg-white rounded-xl overflow-hidden border-2 border-gray-300 shadow-md" style={{ minHeight: '400px' }}>
+                              <img
+                                src={image.originalUrl}
+                                alt={`原图 ${index + 1}`}
+                                className="w-full h-full object-contain"
+                                loading="lazy"
+                              />
+                            </div>
                           </div>
-                        </div>
-                        <div className="space-y-2">
-                          <p className="text-xs font-semibold text-[#07c160] text-center">修改后</p>
-                          <div className="aspect-square relative bg-white rounded-lg overflow-hidden border-2 border-[#07c160]">
-                            <img
-                              src={image.url}
-                              alt={`修改后 ${index + 1}`}
-                              className="w-full h-full object-contain"
-                              loading="lazy"
-                            />
+                          <div className="space-y-3">
+                            <p className="text-sm font-semibold text-[#07c160] text-center">修改后</p>
+                            <div className="relative bg-white rounded-xl overflow-hidden border-2 border-[#07c160] shadow-md" style={{ minHeight: '400px' }}>
+                              <img
+                                src={image.url}
+                                alt={`修改后 ${index + 1}`}
+                                className="w-full h-full object-contain"
+                                loading="lazy"
+                              />
+                            </div>
                           </div>
                         </div>
                       </div>
-                      <div className="p-4 bg-gradient-to-r from-gray-50 to-white">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex-1">
-                            <span className="text-sm text-gray-600 block mb-1">差异度</span>
-                            <span className="text-2xl font-bold text-[#07c160]">
+                      <div className="p-6 bg-gradient-to-r from-gray-50 to-white">
+                        <div className="grid grid-cols-2 gap-6 mb-4">
+                          <div className="text-center p-4 bg-white rounded-xl border border-gray-200">
+                            <span className="text-sm text-gray-600 block mb-2">差异度</span>
+                            <span className="text-3xl font-bold text-[#07c160]">
                               {image.difference.toFixed(1)}%
                             </span>
                           </div>
-                          <div className="flex-1 text-right">
-                            <span className="text-sm text-gray-600 block mb-1">相似度</span>
-                            <span className="text-lg font-semibold text-gray-700">
+                          <div className="text-center p-4 bg-white rounded-xl border border-gray-200">
+                            <span className="text-sm text-gray-600 block mb-2">相似度</span>
+                            <span className="text-3xl font-bold text-gray-700">
                               {image.similarity.toFixed(1)}%
                             </span>
                           </div>
                         </div>
                         <Button
                           onClick={() => handleDownload(image.url, index)}
-                          className="w-full bg-[#07c160] hover:bg-[#06ad56] text-white font-semibold rounded-xl h-12"
+                          className="w-full bg-[#07c160] hover:bg-[#06ad56] text-white font-semibold rounded-xl h-14 text-base"
                         >
                           <Download className="mr-2 h-5 w-5" />
                           下载修改后图片
