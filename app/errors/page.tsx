@@ -45,6 +45,12 @@ interface HumanReview {
   created_at: string;
   image_record_id: string;
   task_id: string;
+  image_records?: {
+    original_url: string;
+    modified_url: string;
+    similarity: number;
+    difference: number;
+  };
 }
 
 interface ErrorStats {
@@ -96,7 +102,15 @@ export default function ErrorsPage() {
 
       const reviewsQuery = supabase
         .from('human_reviews')
-        .select('*')
+        .select(`
+          *,
+          image_records (
+            original_url,
+            modified_url,
+            similarity,
+            difference
+          )
+        `)
         .order('created_at', { ascending: false })
         .limit(50);
 
@@ -352,36 +366,89 @@ export default function ErrorsPage() {
               <h2 className="text-xl font-bold text-gray-800 mb-4">
                 最近用户反馈 ({recentReviews.length})
               </h2>
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {recentReviews.map((review) => (
-                  <div key={review.id} className="border rounded-lg p-4 bg-gray-50">
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        {getSeverityBadge(review.severity)}
-                        <Badge className={review.status === 'pass' ? 'bg-green-500' : 'bg-red-500'}>
-                          {review.status === 'pass' ? '通过' : '失败'}
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-gray-500">
-                        {new Date(review.created_at).toLocaleString('zh-CN')}
-                      </p>
-                    </div>
-                    {review.error_types && review.error_types.length > 0 && (
-                      <div className="mb-2">
-                        <p className="text-sm font-medium text-gray-700 mb-1">错误类型:</p>
-                        <div className="flex flex-wrap gap-2">
-                          {review.error_types.map((type, idx) => (
-                            <Badge key={idx} variant="outline" className="text-xs">
-                              {getErrorTypeName(type)}
-                            </Badge>
-                          ))}
+                  <div key={review.id} className="border rounded-lg overflow-hidden bg-white">
+                    <div className="p-4 bg-gray-50">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          {getSeverityBadge(review.severity)}
+                          <Badge className={review.status === 'pass' ? 'bg-green-500' : 'bg-red-500'}>
+                            {review.status === 'pass' ? '通过' : '失败'}
+                          </Badge>
                         </div>
+                        <p className="text-xs text-gray-500">
+                          {new Date(review.created_at).toLocaleString('zh-CN')}
+                        </p>
                       </div>
-                    )}
-                    {review.detailed_feedback && (
-                      <div>
-                        <p className="text-sm font-medium text-gray-700 mb-1">详细反馈:</p>
-                        <p className="text-sm text-gray-600">{review.detailed_feedback}</p>
+                      {review.error_types && review.error_types.length > 0 && (
+                        <div className="mb-2">
+                          <p className="text-sm font-medium text-gray-700 mb-1">错误类型:</p>
+                          <div className="flex flex-wrap gap-2">
+                            {review.error_types.map((type, idx) => (
+                              <Badge key={idx} variant="outline" className="text-xs">
+                                {getErrorTypeName(type)}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {review.detailed_feedback && (
+                        <div className="mb-3">
+                          <p className="text-sm font-medium text-gray-700 mb-1">详细反馈:</p>
+                          <p className="text-sm text-gray-600">{review.detailed_feedback}</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {review.image_records && (
+                      <div className="p-4 bg-white border-t">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-sm font-medium text-gray-700 mb-2">原图</p>
+                            <div className="relative bg-gray-100 rounded-lg overflow-hidden border border-gray-200">
+                              <img
+                                src={review.image_records.original_url}
+                                alt="原图"
+                                className="w-full h-64 object-contain cursor-pointer hover:scale-105 transition-transform"
+                                onClick={() => window.open(review.image_records!.original_url, '_blank')}
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-700 mb-2">修改后</p>
+                            <div className="relative bg-gray-100 rounded-lg overflow-hidden border border-gray-200">
+                              {review.image_records.modified_url ? (
+                                <img
+                                  src={review.image_records.modified_url}
+                                  alt="修改后"
+                                  className="w-full h-64 object-contain cursor-pointer hover:scale-105 transition-transform"
+                                  onClick={() => window.open(review.image_records!.modified_url!, '_blank')}
+                                />
+                              ) : (
+                                <div className="w-full h-64 flex items-center justify-center text-gray-400">
+                                  未生成
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        {review.image_records.similarity !== null && review.image_records.difference !== null && (
+                          <div className="grid grid-cols-2 gap-4 mt-4">
+                            <div className="text-center p-3 bg-gray-50 rounded-lg">
+                              <p className="text-xs text-gray-600 mb-1">相似度</p>
+                              <p className="text-lg font-bold text-gray-800">
+                                {Number(review.image_records.similarity).toFixed(1)}%
+                              </p>
+                            </div>
+                            <div className="text-center p-3 bg-gray-50 rounded-lg">
+                              <p className="text-xs text-gray-600 mb-1">差异度</p>
+                              <p className="text-lg font-bold text-[#07c160]">
+                                {Number(review.image_records.difference).toFixed(1)}%
+                              </p>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
