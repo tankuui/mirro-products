@@ -207,15 +207,20 @@ export default function Home() {
             商品主图修改
           </h1>
           <p className="text-gray-600 text-lg">AI 智能批量修改商品图片，支持最多50张同时处理</p>
-          <div className="flex gap-3 justify-center mt-4">
+          <div className="flex gap-3 justify-center mt-4 flex-wrap">
+            <a href="/images">
+              <Button variant="outline" size="sm" className="border-[#07c160] text-[#07c160] hover:bg-green-50">
+                图片管理
+              </Button>
+            </a>
             <a href="/tasks">
               <Button variant="outline" size="sm">
-                查看任务列表
+                任务列表
               </Button>
             </a>
             <a href="/errors">
               <Button variant="outline" size="sm" className="border-orange-500 text-orange-600 hover:bg-orange-50">
-                错误分析中心
+                错误分析
               </Button>
             </a>
             <a href="/metrics">
