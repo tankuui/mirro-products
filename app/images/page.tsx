@@ -75,33 +75,33 @@ export default function ImagesPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const { data: dbImageData, error: imageError } = await supabase
-        .from("image_records")
-        .select(`
-          id,
-          task_id,
-          original_url,
-          modified_url,
-          status,
-          similarity,
-          difference,
-          user_feedback_status,
-          regeneration_count,
-          created_at,
-          processing_time,
-          error_message
-        `)
-        .order("created_at", { ascending: false })
-        .limit(100);
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-      if (imageError) {
-        console.error("获取图片数据失败:", imageError);
-        toast.error(`获取图片数据失败: ${imageError.message}`);
-        setLoading(false);
-        return;
+      const response = await fetch(
+        `${supabaseUrl}/rest/v1/image_records?select=*&order=created_at.desc&limit=50`,
+        {
+          headers: {
+            'apikey': supabaseKey,
+            'Authorization': `Bearer ${supabaseKey}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=representation',
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
       }
 
-      const imageData = dbImageData || [];
+      const dbImageData = await response.json();
+
+      if (!dbImageData) {
+        throw new Error('No data returned');
+      }
+
+      const imageData: ImageRecord[] = dbImageData || [];
       console.log(`成功获取 ${imageData.length} 条图片记录`);
       setImages(imageData);
 
@@ -111,7 +111,7 @@ export default function ImagesPage() {
         return;
       }
 
-      const taskIds = Array.from(new Set(imageData.map(img => img.task_id)));
+      const taskIds = Array.from(new Set(imageData.map((img: ImageRecord) => img.task_id)));
       const { data: dbTaskData, error: taskError } = await supabase
         .from("tasks")
         .select("id, product_title, created_at")
