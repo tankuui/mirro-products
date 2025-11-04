@@ -73,72 +73,56 @@ export default function ImagesPage() {
 
   const fetchData = async () => {
     try {
-      let imageData: any[] = [];
-      let taskData: any[] = [];
+      const { data: dbImageData, error: imageError } = await supabase
+        .from("image_records")
+        .select(`
+          id,
+          task_id,
+          original_url,
+          modified_url,
+          status,
+          similarity,
+          difference,
+          user_feedback_status,
+          regeneration_count,
+          created_at,
+          processing_time,
+          error_message
+        `)
+        .order("created_at", { ascending: false })
+        .limit(100);
 
-      try {
-        const { data: dbImageData, error: imageError } = await supabase
-          .from("image_records")
-          .select(`
-            id,
-            task_id,
-            original_url,
-            modified_url,
-            status,
-            similarity,
-            difference,
-            user_feedback_status,
-            regeneration_count,
-            created_at,
-            processing_time,
-            error_message
-          `)
-          .order("created_at", { ascending: false })
-          .limit(100);
-
-        if (!imageError && dbImageData) {
-          imageData = dbImageData;
-        }
-      } catch (dbError) {
-        console.log("数据库不可用，使用localStorage");
+      if (imageError) {
+        console.error("获取图片数据失败:", imageError);
+        toast.error("获取图片数据失败");
+        return;
       }
 
-      const localImages = JSON.parse(localStorage.getItem('imageRecords') || '[]');
-      const localTasks = JSON.parse(localStorage.getItem('tasks') || '[]');
+      const imageData = dbImageData || [];
+      setImages(imageData);
 
-      const allImages = [...localImages, ...imageData];
-      const uniqueImages = Array.from(
-        new Map(allImages.map(img => [img.id, img])).values()
-      );
-
-      setImages(uniqueImages);
-
-      try {
-        const taskIds = Array.from(new Set(uniqueImages.map(img => img.task_id)));
-        const { data: dbTaskData } = await supabase
-          .from("tasks")
-          .select("id, product_title, created_at")
-          .in("id", taskIds);
-
-        if (dbTaskData) {
-          taskData = dbTaskData;
-        }
-      } catch (dbError) {
-        console.log("任务数据库不可用，使用localStorage");
+      if (imageData.length === 0) {
+        setTaskGroups([]);
+        return;
       }
 
-      const allTasks = [...localTasks, ...taskData];
-      const uniqueTasks = Array.from(
-        new Map(allTasks.map(t => [t.id, t])).values()
-      );
+      const taskIds = Array.from(new Set(imageData.map(img => img.task_id)));
+      const { data: dbTaskData, error: taskError } = await supabase
+        .from("tasks")
+        .select("id, product_title, created_at")
+        .in("id", taskIds);
 
-      const taskMap = new Map(uniqueTasks.map(t => [t.id, t]));
+      if (taskError) {
+        console.error("获取任务数据失败:", taskError);
+      }
 
-      const allTaskIds = Array.from(new Set(uniqueImages.map(img => img.task_id)));
+      const taskData = dbTaskData || [];
+      const taskMap = new Map(taskData.map(t => [t.id, t]));
+
       const groups: TaskGroup[] = [];
-      allTaskIds.forEach(taskId => {
+      taskIds.forEach(taskId => {
         const taskInfo = taskMap.get(taskId);
-        const taskImages = uniqueImages.filter(img => img.task_id === taskId) || [];
+        const taskImages = imageData.filter(img => img.task_id === taskId);
         if (taskImages.length > 0) {
           groups.push({
             task_id: taskId,
@@ -152,6 +136,7 @@ export default function ImagesPage() {
       setTaskGroups(groups);
     } catch (error) {
       console.error("获取数据失败:", error);
+      toast.error("获取数据失败");
     } finally {
       setLoading(false);
     }
@@ -178,34 +163,22 @@ export default function ImagesPage() {
 
   const handleFeedbackSubmit = async (imageId: string, status: 'pass' | 'fail') => {
     try {
-      const localImages = JSON.parse(localStorage.getItem('imageRecords') || '[]');
-      const updatedImages = localImages.map((img: any) =>
-        img.id === imageId
-          ? { ...img, user_feedback_status: status }
-          : img
-      );
-      localStorage.setItem('imageRecords', JSON.stringify(updatedImages));
+      const response = await fetch(`/api/feedback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageRecordId: imageId,
+          taskId: images.find(img => img.id === imageId)?.task_id,
+          status,
+          errorTypes: selectedErrors,
+          detailedFeedback: feedbackText,
+          severity: selectedErrors.some(e => e.includes('P0')) ? 'P0' :
+                    selectedErrors.some(e => e.includes('P1')) ? 'P1' :
+                    selectedErrors.length > 0 ? 'P2' : 'OK'
+        })
+      });
 
-      try {
-        const response = await fetch(`/api/feedback`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            imageRecordId: imageId,
-            taskId: images.find(img => img.id === imageId)?.task_id,
-            status,
-            errorTypes: selectedErrors,
-            detailedFeedback: feedbackText,
-            severity: selectedErrors.some(e => e.includes('P0')) ? 'P0' :
-                      selectedErrors.some(e => e.includes('P1')) ? 'P1' :
-                      selectedErrors.length > 0 ? 'P2' : 'OK'
-          })
-        });
-
-        if (!response.ok) throw new Error('提交反馈失败');
-      } catch (apiError) {
-        console.log('API不可用，已保存到localStorage');
-      }
+      if (!response.ok) throw new Error('提交反馈失败');
 
       toast.success(status === 'pass' ? '感谢您的反馈!' : '我们会尽快改进!');
       setFeedbackImageId(null);

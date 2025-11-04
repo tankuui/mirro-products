@@ -1,20 +1,29 @@
+'use client';
+
 import './globals.css';
-import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import { Toaster } from '@/components/ui/sonner';
+import { useEffect } from 'react';
 
 const inter = Inter({ subsets: ['latin'] });
-
-export const metadata: Metadata = {
-  title: '商品主图修改 - AI智能修改商品图片',
-  description: '使用AI技术智能修改商品主图，支持淘宝、京东、拼多多等主流电商平台',
-};
 
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  useEffect(() => {
+    const version = '2.0.0';
+    const currentVersion = localStorage.getItem('app_version');
+
+    if (currentVersion !== version) {
+      localStorage.removeItem('imageRecords');
+      localStorage.removeItem('tasks');
+      localStorage.setItem('app_version', version);
+      console.log('已清理旧版本数据');
+    }
+  }, []);
+
   return (
     <html lang="zh-CN">
       <body className={inter.className}>
