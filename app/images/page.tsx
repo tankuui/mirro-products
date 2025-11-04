@@ -75,24 +75,18 @@ export default function ImagesPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-      const response = await fetch(
-        `${supabaseUrl}/rest/v1/image_records?select=*&order=created_at.desc&limit=50`,
-        {
-          headers: {
-            'apikey': supabaseKey,
-            'Authorization': `Bearer ${supabaseKey}`,
-            'Content-Type': 'application/json',
-            'Prefer': 'return=representation',
-          },
-        }
-      );
+      const response = await fetch('/api/images?limit=20', {
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP ${response.status}`);
       }
 
       const dbImageData = await response.json();
@@ -144,7 +138,17 @@ export default function ImagesPage() {
       setTaskGroups(groups);
     } catch (error) {
       console.error("获取数据失败:", error);
-      toast.error(`获取数据失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          toast.error('请求超时，请稍后重试');
+        } else if (error.message.includes('statement timeout')) {
+          toast.error('数据库查询超时，数据量可能过大');
+        } else {
+          toast.error(`获取数据失败: ${error.message}`);
+        }
+      } else {
+        toast.error('获取数据失败: 未知错误');
+      }
     } finally {
       setLoading(false);
     }
