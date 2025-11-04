@@ -34,19 +34,17 @@ export async function GET(request: NextRequest) {
         startTime = new Date(endTime.getTime() - 24 * 60 * 60 * 1000);
     }
 
-    const { data: jobs, error: jobsError } = await supabase
-      .from('image_jobs')
-      .select('id, created_at')
+    const { data: images, error: imagesError } = await supabase
+      .from('image_records')
+      .select('*')
       .gte('created_at', startTime.toISOString())
       .lt('created_at', endTime.toISOString());
 
-    if (jobsError) {
-      throw jobsError;
+    if (imagesError) {
+      throw imagesError;
     }
 
-    const jobIds = jobs.map(j => j.id);
-
-    if (jobIds.length === 0) {
+    if (!images || images.length === 0) {
       return NextResponse.json({
         period,
         startTime: startTime.toISOString(),
@@ -64,40 +62,40 @@ export async function GET(request: NextRequest) {
         avgEdgeScore: 0,
         avgGeomDelta: 0,
         retryRate: 0,
+        errorsByType: {},
+        targets: {
+          p0RateTarget: 1.0,
+          totalFailRateStage1: 5.0,
+          totalFailRateStage2: 3.0,
+          p0RateMature: 0.5,
+        },
       });
     }
 
-    const { data: images, error: imagesError } = await supabase
-      .from('modified_images')
-      .select('*')
-      .in('job_id', jobIds);
-
-    if (imagesError) {
-      throw imagesError;
-    }
-
     const totalImages = images.length;
-    const passedCount = images.filter(img => img.error_level === 'OK').length;
-    const p0Count = images.filter(img => img.error_level === 'P0').length;
-    const p1Count = images.filter(img => img.error_level === 'P1').length;
-    const p2Count = images.filter(img => img.error_level === 'P2').length;
+
+    const qualityDetailsArray = images.map(img => img.quality_details || {});
+    const passedCount = qualityDetailsArray.filter(qd => qd.final_severity === 'OK').length;
+    const p0Count = qualityDetailsArray.filter(qd => qd.final_severity === 'P0').length;
+    const p1Count = qualityDetailsArray.filter(qd => qd.final_severity === 'P1').length;
+    const p2Count = qualityDetailsArray.filter(qd => qd.final_severity === 'P2').length;
 
     const passRate = totalImages > 0 ? passedCount / totalImages : 0;
     const p0Rate = totalImages > 0 ? p0Count / totalImages : 0;
     const p1Rate = totalImages > 0 ? p1Count / totalImages : 0;
 
-    const avgSSIM = images.reduce((sum, img) => sum + (img.ssim_score || 0), 0) / Math.max(1, totalImages);
-    const avgPhashDistance = images.reduce((sum, img) => sum + (img.phash_distance || 0), 0) / Math.max(1, totalImages);
-    const avgEdgeScore = images.reduce((sum, img) => sum + (img.edge_score || 0), 0) / Math.max(1, totalImages);
-    const avgGeomDelta = images.reduce((sum, img) => sum + (img.geom_delta || 0), 0) / Math.max(1, totalImages);
+    const avgSSIM = qualityDetailsArray.reduce((sum, qd) => sum + (qd.ssim_score || 0), 0) / Math.max(1, totalImages);
+    const avgPhashDistance = qualityDetailsArray.reduce((sum, qd) => sum + (qd.phash_distance || 0), 0) / Math.max(1, totalImages);
+    const avgEdgeScore = qualityDetailsArray.reduce((sum, qd) => sum + (qd.edge_score || 0), 0) / Math.max(1, totalImages);
+    const avgGeomDelta = qualityDetailsArray.reduce((sum, qd) => sum + (qd.geom_delta || 0), 0) / Math.max(1, totalImages);
 
-    const retriedImages = images.filter(img => (img.retry_count || 0) > 0).length;
+    const retriedImages = images.filter(img => (img.regeneration_count || 0) > 0).length;
     const retryRate = totalImages > 0 ? retriedImages / totalImages : 0;
 
     const errorsByType: Record<string, number> = {};
-    images.forEach(img => {
-      if (img.error_reasons && Array.isArray(img.error_reasons)) {
-        img.error_reasons.forEach((reason: string) => {
+    qualityDetailsArray.forEach(qd => {
+      if (qd.error_reasons && Array.isArray(qd.error_reasons)) {
+        qd.error_reasons.forEach((reason: string) => {
           errorsByType[reason] = (errorsByType[reason] || 0) + 1;
         });
       }
