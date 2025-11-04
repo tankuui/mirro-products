@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -36,6 +36,13 @@ export default function Home() {
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [progress, setProgress] = useState<ProgressInfo | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const savedLogoText = localStorage.getItem('defaultLogoText');
+    if (savedLogoText) {
+      setLogoText(savedLogoText);
+    }
+  }, []);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -396,13 +403,22 @@ export default function Home() {
                 type="text"
                 placeholder="输入您的品牌名称或 Logo 文字，留空则不添加"
                 value={logoText}
-                onChange={(e) => setLogoText(e.target.value)}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setLogoText(value);
+                  localStorage.setItem('defaultLogoText', value);
+                }}
                 className="w-full h-14 text-base rounded-xl border-2 border-gray-200 focus:border-[#07c160] transition-colors"
                 disabled={loading}
               />
               <p className="text-xs text-gray-500 mt-2">
                 AI 将移除原图中的 Logo，并将您的文字作为新 Logo 添加到图片中
               </p>
+              {logoText && (
+                <p className="text-xs text-[#07c160] mt-1">
+                  ✓ 已保存为默认文字，下次自动填充
+                </p>
+              )}
             </div>
 
 
