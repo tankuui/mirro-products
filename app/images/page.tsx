@@ -66,7 +66,6 @@ export default function ImagesPage() {
   const [feedbackText, setFeedbackText] = useState("");
   const [regenerating, setRegenerating] = useState<string | null>(null);
   const [selectedImages, setSelectedImages] = useState<Set<string>>(new Set());
-  const [processing, setProcessing] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -297,114 +296,6 @@ export default function ImagesPage() {
     toast.success(`批量下载完成！`);
   };
 
-  const realProcessing = async () => {
-    const pendingImages = images.filter(img => img.status === 'pending' || img.status === 'processing');
-
-    if (pendingImages.length === 0) {
-      toast.info('没有待处理的图片');
-      return;
-    }
-
-    setProcessing(true);
-    toast.info(`正在同步数据到数据库...`);
-
-    try {
-      const localImages = JSON.parse(localStorage.getItem('imageRecords') || '[]');
-      const localTasks = JSON.parse(localStorage.getItem('tasks') || '[]');
-
-      const tasksToSync = new Set<string>();
-      pendingImages.forEach(img => tasksToSync.add(img.task_id));
-
-      for (const taskId of Array.from(tasksToSync)) {
-        const task = localTasks.find((t: any) => t.id === taskId);
-        const taskImages = localImages.filter((img: any) => img.task_id === taskId);
-
-        if (!task || taskImages.length === 0) continue;
-
-        try {
-          const { data: existingTask } = await supabase
-            .from('tasks')
-            .select('id')
-            .eq('id', taskId)
-            .maybeSingle();
-
-          if (!existingTask) {
-            const { error: taskError } = await supabase
-              .from('tasks')
-              .insert({
-                id: task.id,
-                user_id: 'anonymous',
-                product_title: task.product_title || '未命名任务',
-                status: 'pending',
-                total_images: taskImages.length,
-                processed_images: 0,
-                progress: 0,
-                current_step: '等待处理',
-                created_at: task.created_at,
-              });
-
-            if (taskError) {
-              console.error('创建任务失败:', taskError);
-              continue;
-            }
-          }
-
-          for (const img of taskImages) {
-            const { data: existingImage } = await supabase
-              .from('image_records')
-              .select('id')
-              .eq('id', img.id)
-              .maybeSingle();
-
-            if (!existingImage && img.status === 'pending') {
-              await supabase.from('image_records').insert({
-                id: img.id,
-                task_id: img.task_id,
-                original_url: img.original_url,
-                status: 'pending',
-                user_feedback_status: 'pending',
-                regeneration_count: 0,
-                final_approval_status: 'pending',
-                created_at: img.created_at,
-              });
-            }
-          }
-
-          toast.info(`开始 AI 处理任务: ${task.product_title}`);
-
-          const edgeFunctionUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/process-task`;
-          const response = await fetch(edgeFunctionUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
-            },
-            body: JSON.stringify({ taskId: task.id }),
-          });
-
-          if (!response.ok) {
-            throw new Error(`处理任务失败: ${response.statusText}`);
-          }
-
-          toast.success(`任务 ${task.product_title} 正在后台处理`);
-        } catch (error) {
-          console.error(`处理任务 ${taskId} 失败:`, error);
-          toast.error(`任务处理失败: ${error instanceof Error ? error.message : '未知错误'}`);
-        }
-      }
-
-      toast.success('所有任务已提交，请每10秒刷新查看处理进度');
-
-      setTimeout(() => {
-        fetchData();
-      }, 3000);
-    } catch (error) {
-      console.error('处理失败:', error);
-      toast.error(`处理失败: ${error instanceof Error ? error.message : '未知错误'}`);
-    } finally {
-      setProcessing(false);
-    }
-  };
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString("zh-CN", {
@@ -639,24 +530,6 @@ export default function ImagesPage() {
               </div>
             </div>
 <div className="flex items-center gap-3">
-              <Button
-                onClick={realProcessing}
-                disabled={processing || images.filter(img => img.status === 'pending' || img.status === 'processing').length === 0}
-                size="lg"
-                className="bg-blue-500 hover:bg-blue-600 text-white"
-              >
-                {processing ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    处理中...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle className="w-4 h-4 mr-2" />
-                    AI 处理
-                  </>
-                )}
-              </Button>
               <Button
                 onClick={batchDownload}
                 disabled={selectedImages.size === 0}
