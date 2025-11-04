@@ -78,6 +78,7 @@ export default function ImagesPage() {
   }, []);
 
   const fetchData = async () => {
+    setLoading(true);
     try {
       const { data: dbImageData, error: imageError } = await supabase
         .from("image_records")
@@ -100,15 +101,18 @@ export default function ImagesPage() {
 
       if (imageError) {
         console.error("获取图片数据失败:", imageError);
-        toast.error("获取图片数据失败");
+        toast.error(`获取图片数据失败: ${imageError.message}`);
+        setLoading(false);
         return;
       }
 
       const imageData = dbImageData || [];
+      console.log(`成功获取 ${imageData.length} 条图片记录`);
       setImages(imageData);
 
       if (imageData.length === 0) {
         setTaskGroups([]);
+        setLoading(false);
         return;
       }
 
@@ -120,9 +124,11 @@ export default function ImagesPage() {
 
       if (taskError) {
         console.error("获取任务数据失败:", taskError);
+        toast.warning(`获取任务信息失败: ${taskError.message}`);
       }
 
       const taskData = dbTaskData || [];
+      console.log(`成功获取 ${taskData.length} 个任务信息`);
       const taskMap = new Map(taskData.map(t => [t.id, t]));
 
       const groups: TaskGroup[] = [];
@@ -139,10 +145,11 @@ export default function ImagesPage() {
         }
       });
 
+      console.log(`生成 ${groups.length} 个任务组`);
       setTaskGroups(groups);
     } catch (error) {
       console.error("获取数据失败:", error);
-      toast.error("获取数据失败");
+      toast.error(`获取数据失败: ${error instanceof Error ? error.message : '未知错误'}`);
     } finally {
       setLoading(false);
     }
