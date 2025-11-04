@@ -15,6 +15,10 @@ import {
   Download,
   AlertCircle,
   Image as ImageIcon,
+  ThumbsUp,
+  ThumbsDown,
+  RefreshCw,
+  MessageSquare,
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -44,6 +48,8 @@ interface ImageRecord {
   difference: number;
   error_message: string;
   processing_time: number;
+  user_feedback_status: string;
+  regeneration_count: number;
 }
 
 interface LogEntry {
@@ -61,6 +67,11 @@ export default function TaskDetailPage() {
   const [images, setImages] = useState<ImageRecord[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [feedbackImageId, setFeedbackImageId] = useState<string | null>(null);
+  const [feedbackMode, setFeedbackMode] = useState<'good' | 'bad' | null>(null);
+  const [selectedErrors, setSelectedErrors] = useState<string[]>([]);
+  const [feedbackText, setFeedbackText] = useState("");
+  const [regenerating, setRegenerating] = useState<string | null>(null);
 
   useEffect(() => {
     fetchTaskDetails();
@@ -109,6 +120,66 @@ export default function TaskDetailPage() {
     } catch (error) {
       console.error("下载失败:", error);
       toast.error("下载失败");
+    }
+  };
+
+  const handleFeedbackClick = (imageId: string, mode: 'good' | 'bad') => {
+    setFeedbackImageId(imageId);
+    setFeedbackMode(mode);
+    setSelectedErrors([]);
+    setFeedbackText("");
+  };
+
+  const handleFeedbackSubmit = async (imageId: string) => {
+    try {
+      const response = await fetch(`/api/feedback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageRecordId: imageId,
+          taskId: task?.id,
+          status: feedbackMode === 'good' ? 'pass' : 'fail',
+          errorTypes: selectedErrors,
+          detailedFeedback: feedbackText,
+          severity: selectedErrors.some(e => e.includes('P0')) ? 'P0' :
+                    selectedErrors.some(e => e.includes('P1')) ? 'P1' :
+                    selectedErrors.length > 0 ? 'P2' : 'OK'
+        })
+      });
+
+      if (!response.ok) throw new Error('提交反馈失败');
+
+      toast.success(feedbackMode === 'good' ? '感谢您的反馈!' : '我们会尽快改进!');
+      setFeedbackImageId(null);
+      setFeedbackMode(null);
+      fetchTaskDetails();
+    } catch (error) {
+      console.error('提交反馈失败:', error);
+      toast.error('提交反馈失败');
+    }
+  };
+
+  const handleRegenerate = async (imageId: string) => {
+    try {
+      setRegenerating(imageId);
+      const response = await fetch(`/api/regenerate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageRecordId: imageId,
+          taskId: task?.id
+        })
+      });
+
+      if (!response.ok) throw new Error('重新生成失败');
+
+      toast.success('已开始重新生成，请稍候...');
+      setTimeout(() => fetchTaskDetails(), 2000);
+    } catch (error) {
+      console.error('重新生成失败:', error);
+      toast.error('重新生成失败');
+    } finally {
+      setRegenerating(null);
     }
   };
 
@@ -361,6 +432,114 @@ export default function TaskDetailPage() {
                           </div>
                         )}
                       </div>
+
+                      {feedbackImageId === image.id ? (
+                        <div className="space-y-3 mb-3">
+                          {feedbackMode === 'bad' && (
+                            <>
+                              <div className="text-sm font-medium text-gray-700">请选择问题类型：</div>
+                              <div className="grid grid-cols-1 gap-2">
+                                {[
+                                  { id: 'product_shape_changed', label: '产品形状改变了 (P0)', color: 'red' },
+                                  { id: 'product_color_changed', label: '产品颜色改变了 (P0)', color: 'red' },
+                                  { id: 'product_size_wrong', label: '产品尺寸比例不对 (P0)', color: 'red' },
+                                  { id: 'background_insufficient', label: '背景变化不够明显 (P1)', color: 'orange' },
+                                  { id: 'logo_not_removed', label: '品牌Logo没去除 (P1)', color: 'orange' },
+                                  { id: 'text_missing', label: '产品文字/规格丢失 (P1)', color: 'orange' },
+                                  { id: 'new_logo_unclear', label: '新Logo不清晰 (P2)', color: 'yellow' },
+                                  { id: 'image_blurry', label: '图片模糊/质量差 (P2)', color: 'yellow' },
+                                ].map(error => (
+                                  <label key={error.id} className="flex items-center gap-2 cursor-pointer p-2 hover:bg-gray-100 rounded">
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedErrors.includes(error.id)}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          setSelectedErrors([...selectedErrors, error.id]);
+                                        } else {
+                                          setSelectedErrors(selectedErrors.filter(id => id !== error.id));
+                                        }
+                                      }}
+                                      className="rounded"
+                                    />
+                                    <span className="text-sm">{error.label}</span>
+                                  </label>
+                                ))}
+                              </div>
+                              <textarea
+                                value={feedbackText}
+                                onChange={(e) => setFeedbackText(e.target.value)}
+                                placeholder="详细描述问题（可选）..."
+                                className="w-full p-2 text-sm border rounded-lg resize-none"
+                                rows={2}
+                              />
+                            </>
+                          )}
+                          <div className="flex gap-2">
+                            <Button
+                              onClick={() => handleFeedbackSubmit(image.id)}
+                              className="flex-1 bg-[#07c160] hover:bg-[#06ad56]"
+                              size="sm"
+                            >
+                              提交反馈
+                            </Button>
+                            <Button
+                              onClick={() => setFeedbackImageId(null)}
+                              variant="outline"
+                              size="sm"
+                            >
+                              取消
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          {image.user_feedback_status === 'pending' && (
+                            <div className="flex gap-2 mb-3">
+                              <Button
+                                onClick={() => handleFeedbackClick(image.id, 'good')}
+                                variant="outline"
+                                className="flex-1 border-green-500 text-green-600 hover:bg-green-50"
+                                size="sm"
+                              >
+                                <ThumbsUp className="mr-1 h-4 w-4" />
+                                满意
+                              </Button>
+                              <Button
+                                onClick={() => handleFeedbackClick(image.id, 'bad')}
+                                variant="outline"
+                                className="flex-1 border-red-500 text-red-600 hover:bg-red-50"
+                                size="sm"
+                              >
+                                <ThumbsDown className="mr-1 h-4 w-4" />
+                                有问题
+                              </Button>
+                            </div>
+                          )}
+                          {image.user_feedback_status === 'fail' && (
+                            <Button
+                              onClick={() => handleRegenerate(image.id)}
+                              disabled={regenerating === image.id}
+                              variant="outline"
+                              className="w-full mb-3 border-orange-500 text-orange-600 hover:bg-orange-50"
+                              size="sm"
+                            >
+                              {regenerating === image.id ? (
+                                <>
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  重新生成中...
+                                </>
+                              ) : (
+                                <>
+                                  <RefreshCw className="mr-2 h-4 w-4" />
+                                  重新生成 {image.regeneration_count > 0 ? `(第${image.regeneration_count + 1}次)` : ''}
+                                </>
+                              )}
+                            </Button>
+                          )}
+                        </>
+                      )}
+
                       <Button
                         onClick={() => handleDownloadImage(image.modified_url, index)}
                         className="w-full bg-[#07c160] hover:bg-[#06ad56] text-white font-semibold rounded-xl"
