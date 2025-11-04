@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
-import { Loader2, Save, Settings, Image as ImageIcon, FileText } from "lucide-react";
+import { Loader2, Save, Settings, Image as ImageIcon, FileText, Trash2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@supabase/supabase-js";
 
@@ -31,9 +31,12 @@ export default function ConfigPage() {
   const [saving, setSaving] = useState(false);
   const [imageConfig, setImageConfig] = useState<Config | null>(null);
   const [textConfig, setTextConfig] = useState<Config | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [stats, setStats] = useState<{ total: number; oldImages: number } | null>(null);
 
   useEffect(() => {
     fetchConfigs();
+    fetchStats();
   }, []);
 
   const fetchConfigs = async () => {
@@ -115,6 +118,47 @@ export default function ConfigPage() {
       toast.error("保存配置失败");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const fetchStats = async () => {
+    try {
+      const response = await fetch("/api/cleanup");
+      const data = await response.json();
+      if (response.ok) {
+        setStats(data);
+      }
+    } catch (error) {
+      console.error("获取统计信息失败:", error);
+    }
+  };
+
+  const handleCleanup = async (days: number) => {
+    if (!confirm(`确定要删除 ${days} 天前的所有图片吗？这个操作无法撤销！`)) {
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      const response = await fetch("/api/cleanup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ days }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success(data.message);
+        fetchStats();
+      } else {
+        toast.error(data.error || "清理失败");
+      }
+    } catch (error) {
+      console.error("清理失败:", error);
+      toast.error("清理失败，请稍后重试");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -440,6 +484,84 @@ export default function ConfigPage() {
                 <li>• 建议先用小修改程度测试，再逐步增加</li>
                 <li>• 不同AI模型的效果和速度可能有差异</li>
               </ul>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="mt-6 p-6 border-2 border-orange-200">
+          <div className="mb-4">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="flex-shrink-0 w-10 h-10 bg-orange-500 rounded-lg flex items-center justify-center">
+                <Trash2 className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800">数据清理</h3>
+                <p className="text-sm text-gray-600">自动删除旧图片，释放存储空间</p>
+              </div>
+            </div>
+          </div>
+
+          {stats && (
+            <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+              <div className="grid grid-cols-2 gap-4 text-center">
+                <div>
+                  <div className="text-2xl font-bold text-gray-800">{stats.total}</div>
+                  <div className="text-xs text-gray-600">总图片数</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-orange-600">{stats.oldImages}</div>
+                  <div className="text-xs text-gray-600">30天前的图片</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <Button
+              onClick={() => handleCleanup(30)}
+              disabled={deleting || !stats || stats.oldImages === 0}
+              variant="outline"
+              className="w-full h-12 border-orange-300 hover:bg-orange-50 hover:border-orange-400"
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  清理中...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-5 h-5 mr-2" />
+                  删除 30 天前的图片
+                  {stats && stats.oldImages > 0 && ` (${stats.oldImages} 张)`}
+                </>
+              )}
+            </Button>
+
+            <Button
+              onClick={() => handleCleanup(60)}
+              disabled={deleting}
+              variant="outline"
+              className="w-full h-12 border-orange-300 hover:bg-orange-50 hover:border-orange-400"
+            >
+              <Trash2 className="w-5 h-5 mr-2" />
+              删除 60 天前的图片
+            </Button>
+
+            <Button
+              onClick={() => handleCleanup(90)}
+              disabled={deleting}
+              variant="outline"
+              className="w-full h-12 border-orange-300 hover:bg-orange-50 hover:border-orange-400"
+            >
+              <Trash2 className="w-5 h-5 mr-2" />
+              删除 90 天前的图片
+            </Button>
+          </div>
+
+          <div className="mt-4 flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-red-800">
+              <strong>警告：</strong>删除操作不可撤销，请谨慎操作！删除后无法恢复图片数据。
             </div>
           </div>
         </Card>
