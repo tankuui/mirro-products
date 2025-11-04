@@ -83,51 +83,58 @@ export default function Home() {
     setProgress({ current: 0, total: uploadedFiles.length, currentFile: "" });
 
     try {
-      const formData = new FormData();
-      uploadedFiles.forEach((file) => {
-        formData.append('files', file);
-      });
-      formData.append('productTitle', logoText.trim() || '批量图片修改');
-      formData.append('modificationLevel', modificationLevel[0].toString());
-      formData.append('logoText', logoText.trim());
+      const taskId = `task_${Date.now()}`;
+      const imageRecords = [];
 
-      const uploadResponse = await fetch('/api/upload-images', {
-        method: 'POST',
-        body: formData,
-      });
+      for (let i = 0; i < uploadedFiles.length; i++) {
+        const file = uploadedFiles[i];
+        const reader = new FileReader();
 
-      if (!uploadResponse.ok) {
-        throw new Error('上传图片失败');
+        const imageData = await new Promise<string>((resolve) => {
+          reader.onload = (e) => resolve(e.target?.result as string);
+          reader.readAsDataURL(file);
+        });
+
+        imageRecords.push({
+          id: `img_${Date.now()}_${i}`,
+          task_id: taskId,
+          original_url: imageData,
+          modified_url: null,
+          status: 'pending',
+          user_feedback_status: 'pending',
+          regeneration_count: 0,
+          final_approval_status: 'pending',
+          similarity: null,
+          difference: null,
+          created_at: new Date().toISOString(),
+        });
       }
 
-      const { imageUrls } = await uploadResponse.json();
+      const existingImages = JSON.parse(localStorage.getItem('imageRecords') || '[]');
+      localStorage.setItem('imageRecords', JSON.stringify([...imageRecords, ...existingImages]));
 
-      const createResponse = await fetch('/api/tasks/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          productTitle: logoText.trim() || '批量图片修改',
-          images: imageUrls,
-          description: `修改程度: ${modificationLevel[0]}%`,
-        }),
-      });
+      const task = {
+        id: taskId,
+        product_title: logoText.trim() || '批量图片修改',
+        status: 'pending',
+        total_images: uploadedFiles.length,
+        processed_images: 0,
+        created_at: new Date().toISOString(),
+      };
 
-      if (!createResponse.ok) {
-        throw new Error('创建任务失败');
-      }
-
-      const { taskId } = await createResponse.json();
+      const existingTasks = JSON.parse(localStorage.getItem('tasks') || '[]');
+      localStorage.setItem('tasks', JSON.stringify([task, ...existingTasks]));
 
       setResult({
         jobId: taskId,
         status: "processing",
       });
 
-      toast.success(`任务已创建！请前往图片管理页面查看处理进度`);
+      toast.success(`已保存${uploadedFiles.length}张图片！请前往图片管理页面查看`);
 
       setTimeout(() => {
         window.location.href = '/images';
-      }, 1500);
+      }, 1000);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "发生未知错误";
       setResult({
@@ -164,22 +171,37 @@ export default function Home() {
     setResult({ jobId: "", status: "processing" });
 
     try {
-      const createResponse = await fetch('/api/tasks/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          productUrl: productUrl,
-          productTitle: logoText.trim() || '单张图片修改',
-          images: [productUrl],
-          description: `修改程度: ${modificationLevel[0]}%`,
-        }),
-      });
+      const taskId = `task_${Date.now()}`;
+      const imageId = `img_${Date.now()}`;
 
-      if (!createResponse.ok) {
-        throw new Error('创建任务失败');
-      }
+      const imageRecord = {
+        id: imageId,
+        task_id: taskId,
+        original_url: productUrl,
+        modified_url: null,
+        status: 'pending',
+        user_feedback_status: 'pending',
+        regeneration_count: 0,
+        final_approval_status: 'pending',
+        similarity: null,
+        difference: null,
+        created_at: new Date().toISOString(),
+      };
 
-      const { taskId } = await createResponse.json();
+      const existingImages = JSON.parse(localStorage.getItem('imageRecords') || '[]');
+      localStorage.setItem('imageRecords', JSON.stringify([imageRecord, ...existingImages]));
+
+      const task = {
+        id: taskId,
+        product_title: logoText.trim() || '单张图片修改',
+        status: 'pending',
+        total_images: 1,
+        processed_images: 0,
+        created_at: new Date().toISOString(),
+      };
+
+      const existingTasks = JSON.parse(localStorage.getItem('tasks') || '[]');
+      localStorage.setItem('tasks', JSON.stringify([task, ...existingTasks]));
 
       setResult({
         jobId: taskId,

@@ -72,44 +72,72 @@ export default function ImagesPage() {
 
   const fetchData = async () => {
     try {
-      const { data: imageData, error: imageError } = await supabase
-        .from("image_records")
-        .select(`
-          id,
-          task_id,
-          original_url,
-          modified_url,
-          status,
-          similarity,
-          difference,
-          user_feedback_status,
-          regeneration_count,
-          created_at,
-          processing_time,
-          error_message
-        `)
-        .order("created_at", { ascending: false })
-        .limit(100);
+      let imageData: any[] = [];
+      let taskData: any[] = [];
 
-      if (imageError) {
-        console.error("获取图片列表失败:", imageError);
-        return;
+      try {
+        const { data: dbImageData, error: imageError } = await supabase
+          .from("image_records")
+          .select(`
+            id,
+            task_id,
+            original_url,
+            modified_url,
+            status,
+            similarity,
+            difference,
+            user_feedback_status,
+            regeneration_count,
+            created_at,
+            processing_time,
+            error_message
+          `)
+          .order("created_at", { ascending: false })
+          .limit(100);
+
+        if (!imageError && dbImageData) {
+          imageData = dbImageData;
+        }
+      } catch (dbError) {
+        console.log("数据库不可用，使用localStorage");
       }
 
-      setImages(imageData || []);
+      const localImages = JSON.parse(localStorage.getItem('imageRecords') || '[]');
+      const localTasks = JSON.parse(localStorage.getItem('tasks') || '[]');
 
-      const taskIds = Array.from(new Set(imageData?.map(img => img.task_id) || []));
-      const { data: taskData } = await supabase
-        .from("tasks")
-        .select("id, product_title, created_at")
-        .in("id", taskIds);
+      const allImages = [...localImages, ...imageData];
+      const uniqueImages = Array.from(
+        new Map(allImages.map(img => [img.id, img])).values()
+      );
 
-      const taskMap = new Map(taskData?.map(t => [t.id, t]) || []);
+      setImages(uniqueImages);
 
+      try {
+        const taskIds = Array.from(new Set(uniqueImages.map(img => img.task_id)));
+        const { data: dbTaskData } = await supabase
+          .from("tasks")
+          .select("id, product_title, created_at")
+          .in("id", taskIds);
+
+        if (dbTaskData) {
+          taskData = dbTaskData;
+        }
+      } catch (dbError) {
+        console.log("任务数据库不可用，使用localStorage");
+      }
+
+      const allTasks = [...localTasks, ...taskData];
+      const uniqueTasks = Array.from(
+        new Map(allTasks.map(t => [t.id, t])).values()
+      );
+
+      const taskMap = new Map(uniqueTasks.map(t => [t.id, t]));
+
+      const allTaskIds = Array.from(new Set(uniqueImages.map(img => img.task_id)));
       const groups: TaskGroup[] = [];
-      taskIds.forEach(taskId => {
+      allTaskIds.forEach(taskId => {
         const taskInfo = taskMap.get(taskId);
-        const taskImages = imageData?.filter(img => img.task_id === taskId) || [];
+        const taskImages = uniqueImages.filter(img => img.task_id === taskId) || [];
         if (taskImages.length > 0) {
           groups.push({
             task_id: taskId,
@@ -149,22 +177,34 @@ export default function ImagesPage() {
 
   const handleFeedbackSubmit = async (imageId: string, status: 'pass' | 'fail') => {
     try {
-      const response = await fetch(`/api/feedback`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          imageRecordId: imageId,
-          taskId: images.find(img => img.id === imageId)?.task_id,
-          status,
-          errorTypes: selectedErrors,
-          detailedFeedback: feedbackText,
-          severity: selectedErrors.some(e => e.includes('P0')) ? 'P0' :
-                    selectedErrors.some(e => e.includes('P1')) ? 'P1' :
-                    selectedErrors.length > 0 ? 'P2' : 'OK'
-        })
-      });
+      const localImages = JSON.parse(localStorage.getItem('imageRecords') || '[]');
+      const updatedImages = localImages.map((img: any) =>
+        img.id === imageId
+          ? { ...img, user_feedback_status: status }
+          : img
+      );
+      localStorage.setItem('imageRecords', JSON.stringify(updatedImages));
 
-      if (!response.ok) throw new Error('提交反馈失败');
+      try {
+        const response = await fetch(`/api/feedback`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            imageRecordId: imageId,
+            taskId: images.find(img => img.id === imageId)?.task_id,
+            status,
+            errorTypes: selectedErrors,
+            detailedFeedback: feedbackText,
+            severity: selectedErrors.some(e => e.includes('P0')) ? 'P0' :
+                      selectedErrors.some(e => e.includes('P1')) ? 'P1' :
+                      selectedErrors.length > 0 ? 'P2' : 'OK'
+          })
+        });
+
+        if (!response.ok) throw new Error('提交反馈失败');
+      } catch (apiError) {
+        console.log('API不可用，已保存到localStorage');
+      }
 
       toast.success(status === 'pass' ? '感谢您的反馈!' : '我们会尽快改进!');
       setFeedbackImageId(null);

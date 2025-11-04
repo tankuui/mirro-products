@@ -2,7 +2,5 @@
   "/page": "app/page.js",
   "/tasks/page": "app/tasks/page.js",
   "/images/page": "app/images/page.js",
-  "/errors/page": "app/errors/page.js",
-  "/metrics/page": "app/metrics/page.js",
-  "/api/metrics/route": "app/api/metrics/route.js"
+  "/metrics/page": "app/metrics/page.js"
 }
