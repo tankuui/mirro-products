@@ -1,4 +1,4 @@
-// File: /home/project/app/layout.tsx
+// File: /Users/zhusansui/.cursor/worktrees/mirro-products/Pr5Ly/app/layout.tsx
 import * as entry from '../../../app/layout.js'
 import type { ResolvingMetadata } from 'next/dist/lib/metadata/types/metadata-interface.js'
 
