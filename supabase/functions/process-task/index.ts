@@ -124,7 +124,7 @@ Deno.serve(async (req: Request) => {
 
     for (const record of imageRecords) {
       let retryCount = 0;
-      const maxRetries = 1;
+      const maxRetries = 2; // 增加到2次重试（总共3次尝试）
       let lastError: Error | null = null;
 
       while (retryCount <= maxRetries) {
@@ -145,8 +145,17 @@ Deno.serve(async (req: Request) => {
           }
 
           const imageBlob = await imageResponse.blob();
-          const arrayBuffer = await imageBlob.arrayBuffer();
-          const base64Image = `data:${imageBlob.type};base64,${btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)))}`;
+          
+          // 检查图片大小（限制为5MB）
+          const maxSize = 5 * 1024 * 1024; // 5MB
+          if (imageBlob.size > maxSize) {
+            throw new Error(`Image too large: ${(imageBlob.size / 1024 / 1024).toFixed(2)}MB (max 5MB). Please compress the image before uploading.`);
+          }
+          
+          console.log(`📷 Processing image ${record.id}: ${(imageBlob.size / 1024).toFixed(2)}KB`);
+          
+          // 直接使用图片 URL（避免 base64 转换的内存问题）
+          const imageUrl = record.original_url;
 
           const descriptionResponse = await fetch(OPENROUTER_API_URL, {
             method: 'POST',
@@ -166,7 +175,7 @@ Deno.serve(async (req: Request) => {
                   },
                   {
                     type: 'image_url',
-                    image_url: { url: base64Image },
+                    image_url: { url: imageUrl },
                   },
                 ],
               },
@@ -202,7 +211,7 @@ Deno.serve(async (req: Request) => {
                   },
                   {
                     type: 'image_url',
-                    image_url: { url: base64Image },
+                    image_url: { url: imageUrl },
                   },
                 ],
               },
@@ -278,19 +287,31 @@ Deno.serve(async (req: Request) => {
           break;
         } catch (error) {
           lastError = error instanceof Error ? error : new Error('Unknown error');
-          console.error(`Failed to process image ${record.id} (attempt ${retryCount + 1}/${maxRetries + 1}):`, lastError);
+          const errorMessage = lastError.message;
+          const errorStack = lastError.stack;
+          
+          console.error(`❌ Failed to process image ${record.id} (attempt ${retryCount + 1}/${maxRetries + 1}):`);
+          console.error(`   Error: ${errorMessage}`);
+          console.error(`   Stack: ${errorStack}`);
 
           retryCount++;
 
           if (retryCount <= maxRetries) {
+            const delaySeconds = 3 + (retryCount * 2); // 递增延迟：3s, 5s, 7s
+            
             await supabase.from('task_logs').insert({
               task_id: taskId,
               log_type: 'warning',
-              message: `图片 ${record.id} 处理失败，正在进行第 ${retryCount + 1} 次重试...`,
-              metadata: { image_id: record.id, attempt: retryCount },
+              message: `图片 ${record.id} 处理失败 (${errorMessage})，${delaySeconds}秒后进行第 ${retryCount + 1} 次重试...`,
+              metadata: { 
+                image_id: record.id, 
+                attempt: retryCount,
+                error: errorMessage
+              },
             });
 
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            console.log(`⏳ Waiting ${delaySeconds}s before retry...`);
+            await new Promise(resolve => setTimeout(resolve, delaySeconds * 1000));
           } else {
             await supabase
               .from('image_records')
@@ -305,7 +326,7 @@ Deno.serve(async (req: Request) => {
               task_id: taskId,
               log_type: 'error',
               message: `图片 ${record.id} 在 ${retryCount} 次尝试后仍然失败: ${lastError.message}`,
-              metadata: { image_id: record.id },
+              metadata: { image_id: record.id, error: errorMessage },
             });
           }
         }

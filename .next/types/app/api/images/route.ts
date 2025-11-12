@@ -1,4 +1,4 @@
-// File: /home/project/app/api/images/route.ts
+// File: /Users/zhusansui/.cursor/worktrees/mirro-products/Pr5Ly/app/api/images/route.ts
 import * as entry from '../../../../../app/api/images/route.js'
 import type { NextRequest } from 'next/server.js'
 
